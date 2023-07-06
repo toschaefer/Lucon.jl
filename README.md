@@ -14,8 +14,8 @@ Here, $H$ is a hermitian matrix (to be diagonalized) and $N$ is a diagonal matri
 
 In order to use Lucon to optimize a loss function $L(U)$ one has provide a function that calculates the Eucledean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$. For the above example (Brockett criterion) the Eucledean derivative simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$.  
 
-To this end sub-type of the abstract type ```Lucon.LossFunctional``` has to be defined which can hold all quantities necessary for the loss function (for the example, it is only the hermitian matric $H$).
-The eucledean derivative has to be provided by overloading the function ```Lucon.EuclideanDerivative```.
+To this end a sub-type of the abstract type ```Lucon.LossFunctional``` has to be defined which can hold all quantities necessary for the loss function (for the example, it is only the hermitian matrix $H$).
+The Eucledean derivative has to be provided by overloading the function ```Lucon.EuclideanDerivative```.
 
 ```julia
 struct LossFunctional <: Lucon.LossFunctional
