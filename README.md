@@ -4,7 +4,7 @@
 
 Lucon (**L**oss optimization under **U**nitary **CON**straint) optimizes loss functions mapping a unitary matrix onto a number. A conjugate-gradient algorithm is used following the work by [T. Abrudan et al., Signal Processing 89 (2009) 1704–1714](https://dx.doi.org/10.1016/j.sigpro.2009.03.015).  
 
-The module presents potential applications in various fields. For instance, it can be employed for tasks such as orbital rotations (e.g., orbital localization) in quantum chemistry and materials science, as well as for various signal processing applications.  
+The module presents potential applications in various fields. For instance, it can be employed for tasks such as orbital rotations (e.g., orbital localization) in quantum chemistry and materials science, as well as for various tasks in signal processing applications or machine learning algorithms.  
 
 The code is designed in a way that users can implement arbitrary loss functions with little effort for optimization with Lucon.jl.
 
@@ -22,6 +22,8 @@ To this end a sub-type of the abstract type ```Lucon.LossFunctional``` has to be
 The Eucledean derivative has to be provided by overloading the function ```Lucon.EuclideanDerivative```.
 
 ```julia
+import Lucon
+
 struct LossFunctional <: Lucon.LossFunctional
     H::Hermitian{<:Number}
 end
