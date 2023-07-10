@@ -1,4 +1,4 @@
-# Lucon
+# <p align="center"> <img src="logo/logo_transparent.png" width="193" height="132"> </p>
 
 [![Build Status](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
