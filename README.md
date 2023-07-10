@@ -1,4 +1,4 @@
-# <p align="center"> <img src="logo/logo_transparent.png" width="193" height="132"> </p>
+# Lucon
 
 [![Build Status](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
@@ -13,6 +13,8 @@ To provide a very simple and illustrative example of the module's potential use 
 L(U) = \text{tr}(U^\dagger H U N)
 ```
 Here, $H$ is a hermitian matrix (to be diagonalized) and $N$ is a diagonal matrix with distinct entries in ascending order, $N_{nm} = n\delta_{nm}$. Lucon finds the optimal $U$ which maximizes the loss function.  For this particular choice of $L(U)$ (also known as [Brockett criterion](https://doi.org/10.1016/0024-3795(91)90021-N)), the optimal unitary matrix is the one that diagonalizes $H$.
+
+<p align="center"> <img src="logo/logo_transparent.png" width="193" height="132"> </p>
 
 ## Usage
 
