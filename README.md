@@ -16,6 +16,15 @@ Here, $H$ is a hermitian matrix (to be diagonalized) and $N$ is a diagonal matri
 
 <p align="center"> <img src="logo/logo_transparent.png" width="193" height="132"> </p>
 
+## Install
+
+In the Julia REPL, simply run the following commands:
+```julia
+using Pkg
+Pkg.add("Lucon")
+```
+
+
 ## Usage
 
 In order to use Lucon to optimize a loss functional $L(U)$ one has provide a Julia function that calculates the Eucledean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$. For the above example (Brockett criterion) the Eucledean derivative simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$.  
