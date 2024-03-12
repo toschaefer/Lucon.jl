@@ -1,7 +1,7 @@
 name = "Lucon"
 uuid = "ee70d37e-021e-48ac-98f1-58dad3ba901e"
 authors = ["Tobias Schäfer"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
