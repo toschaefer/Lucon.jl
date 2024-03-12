@@ -94,7 +94,7 @@ function optimize(
         G["curr"] = G["curr"] - G["curr"]'
 
         # calculate gradient norm via Frobenius norm
-        GradientNorm = (real(G["curr"]⋅G["curr"]))/2.0
+        GradientNorm = sqrt(real(G["curr"]⋅G["curr"]))
 
 	output = @sprintf("%6d %11.3e %24.16e\n", Iteration, GradientNorm, Loss)
 	@info output

@@ -36,13 +36,13 @@ import .BrockettLoss
     (U, _) = BrockettLoss.optimize(
                     BL,
     	            U,
-    	            GradNormBreak=1.0E-12,
+    	            GradNormBreak=1.0E-8,
     	            PolynomialLineSearchDegree=5
     	        )
     # build diagonal matrix with U obtained from Lucon and compare with exact diagonal matrix
     Σapprox = U'*H*U
     Σexact  = Diagonal(eigen(H).values)
     Σdiff   = Σexact - Σapprox
-    @test (√real(Σdiff⋅Σdiff)) < 1.0E-6 # should be < 1.0E-6 if GradNormBreak=1.0E-12
+    @test (√real(Σdiff⋅Σdiff)) < 1.0E-7 # should be < 1.0E-7 if GradNormBreak=1.0E-8
 
 end
