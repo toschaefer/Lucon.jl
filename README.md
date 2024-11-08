@@ -61,3 +61,7 @@ L = LossFunctional(H)
 ```
 The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).  
 Both can be used as a **template** to implement arbitrary loss functionals.
+
+## How to cite?
+
+Benjamin Wöckinger, Alexander Rumpf, Tobias Schäfer. *Exploring Intrinsic Bond Orbitals in Solids*, [arXiv:2409.18212](https://arxiv.org/abs/2409.18212)
