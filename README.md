@@ -64,4 +64,4 @@ Both can be used as a **template** to implement arbitrary loss functionals.
 
 ## How to cite?
 
-Benjamin Wöckinger, Alexander Rumpf, Tobias Schäfer. *Exploring Intrinsic Bond Orbitals in Solids*, [arXiv:2409.18212](https://arxiv.org/abs/2409.18212)
+Benjamin Wöckinger, Alexander Rumpf, Tobias Schäfer. *Convergence and Properties of Intrinsic Bond Orbitals in Solids*, [J. Chem. Theory Comput. 2025, 21, 20, 10515–10526](https://doi.org/10.1021/acs.jctc.5c00130)
