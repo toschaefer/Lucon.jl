@@ -89,12 +89,11 @@ function Lucon.EuclideanDerivative(
     U::Matrix{T},
     CalcLoss::Bool
 )::Tuple{Matrix{T},Float64} where T<:Number
-    Γ = zero(similar(U)) # Euclidean derivative has same type and dimension as U
     Loss = 0.0 # the value of the Loss function
     H = L.H # alias
     dim = size(H,1)
     N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
-    Γ = H*U*N
+    Γ = H*U*N # Euclidean derivative has same type and dimension as U
     (CalcLoss == true) && (Loss = real(tr(U'*Γ)))
     return (Γ, Loss)
 end 

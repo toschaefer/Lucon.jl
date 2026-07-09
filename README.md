@@ -62,6 +62,15 @@ L = LossFunctional(H)
 The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).  
 Both can be used as a **template** to implement arbitrary loss functionals.
 
+The `optimize` function above is a thin wrapper around `Lucon.optimize`, which takes two further positional arguments:
+```julia
+(U, Loss) = Lucon.optimize(L, U, UDegree, sgn; MinIter=0, MaxIter=-1, GradNormBreak=1.0e-8, PolynomialLineSearchDegree=5)
+```
+* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans. For the Brockett criterion above $q=2$.
+* `sgn` is `+1.0` to maximize and `-1.0` to minimize $L(U)$.
+
+The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type. Convergence is reached once the Frobenius norm of the Riemannian gradient drops below `GradNormBreak`, and `MaxIter` limits the number of rotations of `U`.
+
 ## How to cite?
 
 Benjamin Wöckinger, Alexander Rumpf, Tobias Schäfer. *Convergence and Properties of Intrinsic Bond Orbitals in Solids*, [J. Chem. Theory Comput. 2025, 21, 20, 10515–10526](https://doi.org/10.1021/acs.jctc.5c00130)

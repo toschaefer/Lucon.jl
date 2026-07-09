@@ -37,15 +37,34 @@ abstract type LossFunctional end
 # "empty" implementation of EuclideanDerivative method
 function EuclideanDerivative(
     ::LossFunctional,
-    ::Matrix{<:T}, 
+    ::Matrix{T},
     ::Bool
-)::Tuple{Matrix{<:T}, Float64} where T<:Number
+)::Tuple{Matrix{T}, Float64} where T<:Number
     error("EuclideanDerivative method not implemented for this functional type")
 end
 
 
 """
-Calculate the optimal unitary matrix U iteratively
+Calculate the optimal unitary matrix U iteratively.
+
+Arguments:
+* `L`: the loss functional, a sub-type of `Lucon.LossFunctional` which provides a method
+  `Lucon.EuclideanDerivative`.
+* `U`: the initial unitary matrix. Its element type selects the group the optimization runs
+  on, the orthogonal group for a real and the unitary group for a complex element type.
+* `UDegree`: the order q of the loss functional, i.e. the highest power of t appearing in the
+  Taylor expansion of L(U + tZ). It sets the width T_μ = 2π/(q|ω_max|) of the line search
+  window, see Eq. (15) in T. Abrudan et al.
+* `sgn`: +1.0 to maximize and -1.0 to minimize the loss functional.
+
+Keyword arguments:
+* `MinIter`: no convergence is signalled before this number of iterations is reached.
+* `MaxIter`: upper limit for the number of rotations of U, a negative value means no limit.
+* `GradNormBreak`: convergence threshold for the Frobenius norm of the Riemannian gradient.
+* `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, "CG-PR".
+* `PolynomialLineSearchDegree`: the order P of the polynomial used in the line search, 3 to 5.
+
+Returns the optimal U together with the value of the loss functional at that U.
 """
 function optimize(
     L::LossFunctional,
@@ -63,13 +82,14 @@ function optimize(
     if SolverAlgo != "CG-PR"
         error("algorithm " * SolverAlgo * " currently not supported in Lucon")
     end
+    UDegree >= 1 || error("UDegree must be a positive integer")
+    PolynomialLineSearchDegree >= 1 || error("PolynomialLineSearchDegree must be a positive integer")
 
-    G = Dict{String, Matrix{T}}()
-    G["curr"] = zero(similar(U)) # will hold Riemannian derivative of current Iteration
-    G["prev"] = zero(similar(U)) # will hold Riemannian derivative of previous Iteration
+    Gcurr = zeros(T, size(U)) # will hold Riemannian derivative of current Iteration
+    Gprev = zeros(T, size(U)) # will hold Riemannian derivative of previous Iteration
 
     # init ascent direction H with zeros
-    H = zero(similar(G["curr"]))
+    H = zeros(T, size(U))
 
     Loss = 0.0 # value of loss function in each Iteration
 
@@ -79,56 +99,66 @@ function optimize(
     @info "in Lucon.optimize"
     @info " #iter  grad. norm            loss-function"
 
-    # the main iteration loop (break condition via GradientNorm or MaxIter)
+    # the main iteration loop (break condition via GradientNorm, MaxIter or the step size)
     Iteration = 0
-    while true 
-        
-	MaxIter >= 0 && Iteration >= MaxIter && break
+    Message = "reached break condition: maximum number of iterations"
+    while true
+
         Iteration += 1
 
         # get Eucledean derivative Γ and Loss function
         (Γ, Loss) = EuclideanDerivative(L,U,true)
 
-        # construct current Riemannian derivative G["current"]
-        G["curr"] = Γ * U'
-        G["curr"] = G["curr"] - G["curr"]'
+        # construct current Riemannian derivative Gcurr, see Eq. (2)
+        Gcurr = Γ * U'
+        Gcurr = Gcurr - Gcurr'
 
         # calculate gradient norm via Frobenius norm
-        GradientNorm = sqrt(real(G["curr"]⋅G["curr"]))
+        GradientNorm = sqrt(real(Gcurr⋅Gcurr))
 
-	output = @sprintf("%6d %11.3e %24.16e\n", Iteration, GradientNorm, Loss)
-	@info output
+        output = @sprintf("%6d %11.3e %24.16e\n", Iteration, GradientNorm, Loss)
+        @info output
 
-	# check if convergence is reached
-	GradientNorm < GradNormBreak && Iteration > MinIter && break
+        # check if convergence is reached
+        if GradientNorm < GradNormBreak && Iteration > MinIter
+            Message = "reached break condition: gradient norm below GradNormBreak"
+            break
+        end
 
-	# Calculate conjugate gradient Polak-Ribière-Polyak (CG-PR) update factor 
-	if Iteration > 1
-	    CGPR_Factor = real((G["curr"]⋅(G["curr"]-G["prev"]))) / real(G["prev"]⋅G["prev"])
-	else
-	    CGPR_Factor = 0.0
-	end
+        # MaxIter counts the rotations of U, of which none has been performed yet
+        MaxIter >= 0 && Iteration > MaxIter && break
 
-	# update "prev"
-        G["prev"] = copy(G["curr"])
+        # Calculate conjugate gradient Polak-Ribière-Polyak (CG-PR) update factor, see Eq. (10)
+        if Iteration > 1
+            CGPR_Factor = real(Gcurr⋅(Gcurr-Gprev)) / real(Gprev⋅Gprev)
+        else
+            CGPR_Factor = 0.0
+        end
 
-	# update ascent direction
-        H = G["curr"] + CGPR_Factor * H
+        # update "prev"
+        Gprev = copy(Gcurr)
 
-	# check if set-back of the history of H (CGPR factor) is necessary
-	if (0.5*real(H⋅G["curr"]) < 0.0) || ( ((Iteration-1)%size(U,1)==0) && (Iteration>2) )
-	    H = G["curr"]
-	    CGPR_Factor = 0.0
-	end
+        # update ascent direction
+        H = Gcurr + CGPR_Factor * H
 
-	# find the optimal step size via polynomial line search 
-	# (here we hard code a polynomial degree of 5)
-	U = RotateUviaPolynomialLineSearch(L, Γ, U, H, UDegree, sgn, PolynomialLineSearchDegree) 
+        # check if set-back of the history of H (CGPR factor) is necessary
+        if (0.5*real(H⋅Gcurr) < 0.0) || ( ((Iteration-1)%size(U,1)==0) && (Iteration>2) )
+            H = copy(Gcurr)
+        end
+
+        # find the optimal step size via polynomial line search
+        (U, μ) = RotateUviaPolynomialLineSearch(L, Γ, U, H, UDegree, sgn, PolynomialLineSearchDegree)
+
+        # a vanishing step size leaves U unchanged and no further progress can be made
+        if μ == 0.0
+            @warn "Lucon.optimize: line search found no positive step size"
+            Message = "reached break condition: line search found no step size"
+            break
+        end
 
     end
 
-    output = "reached break condition"
-    @info output
+    @info Message
 
     return (U,Loss)
 end # optimize
@@ -136,18 +166,66 @@ end # optimize
 
 
 """
+Assemble the rotation matrix R = exp(sgn*μ*H) = VΣV' from the eigenvectors V of the
+skew-hermitian matrix H and the diagonal matrix Σ holding its exponentiated eigenvalues.
+On the orthogonal group H is real and skew-symmetric, so that R is real up to roundoff.
+"""
+RotationMatrix(::Type{T}, V, Σ) where T<:Real    = real(V*Σ*V')
+RotationMatrix(::Type{T}, V, Σ) where T<:Complex = V*Σ*V'
+
+
+
+"""
+Smallest strictly positive real root of the polynomial p(μ) = c[1] + c[2]μ¹ + c[3]μ² + ...
+obtained from the eigenvalues of the companion matrix of p. Returns `nothing` if p has no
+such root, see step 8 of Table 1 in T. Abrudan et al.
+"""
+function SmallestPositiveRoot(c::Vector{Float64})::Union{Float64,Nothing}
+
+    scale = maximum(abs, c)
+    scale == 0.0 && return nothing
+
+    # negligible leading coefficients render the companion matrix ill-conditioned and
+    # produce spurious roots of the order of 1/eps, so lower the degree of p instead
+    while length(c) > 1 && abs(c[end]) <= eps(Float64)*scale
+        c = c[1:end-1]
+    end
+    length(c) < 2 && return nothing
+
+    degree = length(c) - 1
+    cM = zeros(Float64, degree, degree)
+    for i = 1:degree-1
+        cM[i,i+1] = 1.0
+    end
+    for j = 1:degree
+        cM[degree,j] = -c[j]/c[end]
+    end
+    (roots, _) = eigen(cM) # calculate eigenvalues of companion matrix, equivalent to the roots
+
+    positiveRealRoots = filter(x->x>0.0, real(filter(isreal, roots)))
+    isempty(positiveRealRoots) && return nothing
+
+    return minimum(positiveRealRoots)
+end
+
+
+
+"""
 Perform a polynomial line search for the optimal step size μ for the conjugate-gradient algorithm.
-The procedure is described in section 3.1 in T. Abrudan et al. / Signal Processing 89 (2009) 1704–1714 
+The procedure is described in section 3.1 in T. Abrudan et al. / Signal Processing 89 (2009) 1704–1714
+
+Returns the rotated matrix exp(sgn*μ*H)U together with the step size μ. A step size of zero means
+that the line search found no local optimum along the geodesic, in which case U is returned unchanged.
 """
 function RotateUviaPolynomialLineSearch(
     L::LossFunctional,
     Γ::Matrix{T},
     U::Matrix{T},
-    H::Matrix{T}, 
+    H::Matrix{T},
     UDegree::Integer,
     sgn::Float64,
     PolynomialDegree::Integer
-)::Matrix{T} where T<:Number
+)::Tuple{Matrix{T},Float64} where T<:Number
 
     # diagonalize the skew symmetric matrix H by
     # constructing the hermitian matrix H*im and diagonalize
@@ -156,24 +234,25 @@ function RotateUviaPolynomialLineSearch(
 
     # sampling points of μ = 0*μstep, 1*μstep, 2*μstep, ...
     maxAbsEigenval = maximum(map(abs,AuxEigenvals))
+    maxAbsEigenval == 0.0 && return (U, 0.0) # H vanishes only in a stationary point
     μstep = 2.0*pi/PolynomialDegree/UDegree/maxAbsEigenval
 
     # set up rotation matrix exp(sgn*μstep*H)
     Σ = Diagonal( map(exp, sgn*μstep*Eigenvals) )
     # calc trafo matrix for U
-    isreal(U) ? R = real(V*Σ*V') : R = V*Σ*V'
+    R = RotationMatrix(T, V, Σ)
 
-    # for every μ>0 we calculate the derivative dLdμ = d/dμ L(exp(sgn*μ*H)U) 
+    # for every μ>0 we calculate the derivative dLdμ = d/dμ L(exp(sgn*μ*H)U)
     dLdμ = Array{Float64}(undef, PolynomialDegree)
     rotatedU = copy(U)
     for i = 1:PolynomialDegree
         rotatedU = R*rotatedU
-	(rotatedΓ, _) = EuclideanDerivative(L,rotatedU,false)
-	# finally construct dLdμ, see Eq. (14) in T. Abrudan et al., Signal Processing 89 (2009) 1704–1714
-	dLdμ[i] = 2*sgn*real( tr( rotatedΓ*(H*rotatedU)' ) ) 
+        (rotatedΓ, _) = EuclideanDerivative(L,rotatedU,false)
+        # finally construct dLdμ, see Eq. (14) in T. Abrudan et al., Signal Processing 89 (2009) 1704–1714
+        dLdμ[i] = 2*sgn*real( tr( rotatedΓ*(H*rotatedU)' ) )
     end
 
-    # we don't forget the case of μ = 0 and store it separatly 
+    # we don't forget the case of μ = 0 and store it separatly
     dLdμ0 = 2*sgn*real( tr( Γ*(H*U)' ) )
 
     # set up the coefficients for the polynomial by solving the linear System Ma=b for a
@@ -181,33 +260,21 @@ function RotateUviaPolynomialLineSearch(
     M = Matrix{Float64}(undef, PolynomialDegree, PolynomialDegree)
     for i = 1:PolynomialDegree
         for j = 1:PolynomialDegree
-	    M[i,j] = (i*μstep)^j
+            M[i,j] = (i*μstep)^j
         end
     end
     a = M\b # solve linear system
 
-    # We aim for the smallest root of the polynomial p(x) = a₀ + a₁x¹ + a₂x² + ... 
-    # To this end we construct the companion matrix cM and calculate its eigenvalues
-    cM = zero(similar(M))
-    for i = 1:PolynomialDegree-1
-      cM[i,i+1] = 1.0
-    end
-    for j = 2:PolynomialDegree
-      cM[PolynomialDegree,j] = -1.0*a[j-1]/a[PolynomialDegree]
-    end
-    cM[PolynomialDegree,1] = -1.0*dLdμ0/a[PolynomialDegree]
-    (roots, _) = eigen(cM) # calculate eigenvalues of companion matrix, equivalent to the roots
-
-    # the optimal μ corresponds to the smallest positive real root of the polynomial p(x) from above
-    μOpt = minimum(filter(x->x>0.0, real(filter(isreal, roots))))
+    # the optimal μ corresponds to the smallest positive real root of p(μ) = a₀ + a₁μ¹ + a₂μ² + ...
+    μOpt = SmallestPositiveRoot(vcat(dLdμ0, a))
+    μOpt === nothing && return (U, 0.0)
 
     # rotate U with optimal μ: rotatedU = exp(sgn*μOpt*H) U
     Σ = Diagonal( map(exp, sgn*μOpt*Eigenvals) )
-    isreal(U) ? rotatedU = real(V*Σ*V')*U : rotatedU = V*Σ*V'*U
+    rotatedU = RotationMatrix(T, V, Σ) * U
 
-    return rotatedU
+    return (rotatedU, μOpt)
 end
 
 end # Lucon
-
 
