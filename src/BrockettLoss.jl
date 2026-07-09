@@ -1,22 +1,4 @@
 """
-Copyright 2023 Tobias Schäfer
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-
-
-"""
 BrockettLoss --- diagonalizing an hermitian matrix iteratively using the Brockett criteroin
 
 This simple module serves as a template for the implementation of functionals to optimize with the Lucon.jl module.
@@ -29,10 +11,8 @@ The euclidean derivative simply reads
 dL/dU' = HUN
 
 The code basically follows the functional as proposed in
-R.W. Brockett - Linear Algebra and its Applications, 146 (1991) 
+R.W. Brockett - Linear Algebra and its Applications, 146 (1991)
 """
-
-
 module BrockettLoss
 
 using LinearAlgebra
