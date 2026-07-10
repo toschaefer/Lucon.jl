@@ -36,11 +36,11 @@ end
 function optimize(
     L::LossFunctional,
     U::AbstractMatrix{T};
-    MinIter=0,
-    MaxIter=-1,
-    MaxGradientTolerance = 1.0E-10,
-    SolverAlgo = "CG-PR",
-    PolynomialLineSearchDegree = 5
+    MinIter::Integer = 0,
+    MaxIter::Integer = typemax(Int),
+    MaxGradientTolerance::Real = 1.0E-10,
+    SolverAlgo::Symbol = :CGPR,
+    PolynomialLineSearchDegree::Integer = 5
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
     UDegree = 2
     sgn = +1.0 # maximization
@@ -75,7 +75,7 @@ function Lucon.EuclideanDerivative(
     N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
     Γ = H*U*N # Euclidean derivative has same type and dimension as U
     # the trace of U'Γ is the Frobenius product of U and Γ
-    (CalcLoss == true) && (Loss = real(dot(U, Γ)))
+    CalcLoss && (Loss = real(dot(U, Γ)))
     return (Γ, Loss)
 end
 

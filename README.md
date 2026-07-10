@@ -47,7 +47,7 @@ function Lucon.EuclideanDerivative(
     N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
     Γ = L.H*U*N # Euclidean derivative has same type and dimension as U
     # the trace of U'Γ is the Frobenius product of U and Γ
-    (CalcLoss == true) && (Loss = real(dot(U, Γ)))
+    CalcLoss && (Loss = real(dot(U, Γ)))
     return (Γ, Loss)
 end
 ```
@@ -63,12 +63,20 @@ Both can be used as a **template** to implement arbitrary loss functionals.
 
 The `optimize` function above is a thin wrapper around `Lucon.optimize`, which takes two further positional arguments:
 ```julia
-(U, Loss) = Lucon.optimize(L, U, UDegree, sgn; MinIter=0, MaxIter=-1, MaxGradientTolerance=1.0e-8, PolynomialLineSearchDegree=5)
+(U, Loss) = Lucon.optimize(
+    L, 
+    U, 
+    UDegree, 
+    sgn; 
+    MinIter=0, 
+    MaxIter=typemax(Int), 
+    MaxGradientTolerance=1.0e-8, 
+    PolynomialLineSearchDegree=5)
 ```
 * `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans. For the Brockett criterion above $q=2$.
 * `sgn` is `+1.0` to maximize and `-1.0` to minimize $L(U)$.
 
-The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type. `MaxIter` limits the number of rotations of `U`.
+The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type. `MaxIter` limits the number of rotations of `U` and is unlimited by default.
 
 Convergence is reached once the largest absolute element of the Riemannian gradient $G$ drops below `MaxGradientTolerance`. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $N$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{N}$. One and the same `MaxGradientTolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom. 
 

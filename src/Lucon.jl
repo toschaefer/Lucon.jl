@@ -40,12 +40,12 @@ Arguments:
 
 Keyword arguments:
 * `MinIter`: no convergence is signalled before this number of iterations is reached.
-* `MaxIter`: upper limit for the number of rotations of U, a negative value means no limit.
+* `MaxIter`: upper limit for the number of rotations of U, by default unlimited.
 * `MaxGradientTolerance`: convergence threshold for the largest absolute element of the
   Riemannian gradient. Unlike the Frobenius norm, this maximum norm is independent of the
   size of the system, so that one and the same threshold converges a subsystem and a
   supersystem built from copies of it to the same accuracy.
-* `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, "CG-PR".
+* `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, `:CGPR`.
 * `PolynomialLineSearchDegree`: the order P of the polynomial used in the line search, 3 to 5.
 
 Returns the optimal U together with the value of the loss functional at that U.
@@ -54,30 +54,31 @@ function optimize(
     L::LossFunctional,
     U::AbstractMatrix{T},
     UDegree::Integer,
-    sgn::Float64;
-    MinIter = 0,
-    MaxIter = -1,
-    MaxGradientTolerance = 1.0E-8,
-    SolverAlgo = "CG-PR",
-    PolynomialLineSearchDegree = 5
+    sgn::Real;
+    MinIter::Integer = 0,
+    MaxIter::Integer = typemax(Int),
+    MaxGradientTolerance::Real = 1.0E-8,
+    SolverAlgo::Symbol = :CGPR,
+    PolynomialLineSearchDegree::Integer = 5
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
 
     # currently only the CG-PR (conjugate gradient Polak-Ribièrre algorithm is implemented)
-    if SolverAlgo != "CG-PR"
-        error("algorithm " * SolverAlgo * " currently not supported in Lucon")
-    end
-    UDegree >= 1 || error("UDegree must be a positive integer")
-    PolynomialLineSearchDegree >= 1 || error("PolynomialLineSearchDegree must be a positive integer")
+    SolverAlgo === :CGPR || throw(ArgumentError("algorithm :$SolverAlgo currently not supported in Lucon"))
+    UDegree >= 1 || throw(ArgumentError("UDegree must be a positive integer"))
+    PolynomialLineSearchDegree >= 1 || throw(ArgumentError("PolynomialLineSearchDegree must be a positive integer"))
+    MinIter >= 0 || throw(ArgumentError("MinIter must be non-negative"))
+    MaxIter >= 0 || throw(ArgumentError("MaxIter must be non-negative"))
 
-    Gcurr = zero(U) # will hold Riemannian derivative of current Iteration
+    # renormalize sgn to +1.0 or -1.0, a vanishing sgn leaves no direction to move along
+    sgn = float(sign(sgn))
+    iszero(sgn) && throw(ArgumentError("sgn must be positive (maximize) or negative (minimize)"))
+
     Gprev = zero(U) # will hold Riemannian derivative of previous Iteration
 
     # init ascent direction H with zeros
     H = zero(U)
 
     Loss = 0.0 # value of loss function in each Iteration
-
-    sgn = sign(sgn) # renormalize sgn to +1.0 or -1.0 using the sign(...) function
 
     # some output
     @info "in Lucon.optimize"
@@ -100,8 +101,7 @@ function optimize(
         # the maximum norm of the gradient does not grow with the size of the system
         MaxGradient = maximum(abs, Gcurr)
 
-        output = @sprintf("%6d %11.3e %24.16e\n", Iteration, MaxGradient, Loss)
-        @info output
+        @info @sprintf("%6d %11.3e %24.16e", Iteration, MaxGradient, Loss)
 
         # check if convergence is reached
         if MaxGradient < MaxGradientTolerance && Iteration > MinIter
@@ -110,7 +110,7 @@ function optimize(
         end
 
         # MaxIter counts the rotations of U, of which none has been performed yet
-        MaxIter >= 0 && Iteration > MaxIter && break
+        Iteration > MaxIter && break
 
         # Calculate conjugate gradient Polak-Ribière-Polyak (CG-PR) update factor, see Eq. (10)
         if Iteration > 1
@@ -169,27 +169,23 @@ such root, see step 8 of Table 1 in T. Abrudan et al.
 """
 function SmallestPositiveRoot(c::Vector{Float64})::Union{Float64,Nothing}
 
-    scale = maximum(abs, c)
-    scale == 0.0 && return nothing
-
     # negligible leading coefficients render the companion matrix ill-conditioned and
     # produce spurious roots of the order of 1/eps, so lower the degree of p instead
-    while length(c) > 1 && abs(c[end]) <= eps(Float64)*scale
-        c = c[1:end-1]
-    end
-    length(c) < 2 && return nothing
+    scale = maximum(abs, c)
+    lead = findlast(x -> abs(x) > eps(Float64)*scale, c)
+    (lead === nothing || lead < 2) && return nothing
 
-    degree = length(c) - 1
+    degree = lead - 1
     cM = zeros(Float64, degree, degree)
     for i = 1:degree-1
         cM[i,i+1] = 1.0
     end
     for j = 1:degree
-        cM[degree,j] = -c[j]/c[end]
+        cM[degree,j] = -c[j]/c[lead]
     end
-    (roots, _) = eigen(cM) # calculate eigenvalues of companion matrix, equivalent to the roots
+    roots = eigvals(cM) # the eigenvalues of the companion matrix are the roots of p
 
-    positiveRealRoots = filter(x->x>0.0, real(filter(isreal, roots)))
+    positiveRealRoots = [real(r) for r in roots if isreal(r) && real(r) > 0.0]
     isempty(positiveRealRoots) && return nothing
 
     return minimum(positiveRealRoots)
@@ -221,8 +217,8 @@ function RotateUviaPolynomialLineSearch(
 
     # sampling points of μ = 0*μstep, 1*μstep, 2*μstep, ...
     maxAbsEigenval = maximum(abs, AuxEigenvals)
-    maxAbsEigenval == 0.0 && return (U, 0.0) # H vanishes only in a stationary point
-    μstep = 2.0*pi/PolynomialDegree/UDegree/maxAbsEigenval
+    iszero(maxAbsEigenval) && return (U, 0.0) # H vanishes only in a stationary point
+    μstep = 2π / (PolynomialDegree * UDegree * maxAbsEigenval)
 
     # set up rotation matrix exp(sgn*μstep*H)
     R = RotationMatrix(T, V, AuxEigenvals, sgn*μstep)
@@ -230,7 +226,7 @@ function RotateUviaPolynomialLineSearch(
     # for every μ>0 we calculate the derivative dLdμ = d/dμ L(exp(sgn*μ*H)U), see Eq. (14)
     # in T. Abrudan et al. The trace of Γ(HU)' is its Frobenius product, which spares us
     # from forming the matrix product itself.
-    dLdμ = Array{Float64}(undef, PolynomialDegree)
+    dLdμ = Vector{Float64}(undef, PolynomialDegree)
     rotatedU = copy(U)
     for i = 1:PolynomialDegree
         rotatedU = R*rotatedU
