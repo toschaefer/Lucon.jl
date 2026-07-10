@@ -41,18 +41,19 @@ end
 
 function Lucon.EuclideanDerivative(
     L::LossFunctional,
-    U::Matrix{T},
+    U::AbstractMatrix{T},
     CalcLoss::Bool
-)::Tuple{Matrix{T},Float64} where T<:Number
-    Γ = zero(similar(U)) # Euclidean derivative has same type and dimension as U
+)::Tuple{AbstractMatrix{T},Float64} where T<:Number
     Loss = 0.0 # the value of the Loss functional
     dim = size(L.H,1)
     N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
-    Γ = L.H*U*N
-    (CalcLoss == true) && (Loss = real(tr(U'*Γ)))
+    Γ = L.H*U*N # Euclidean derivative has same type and dimension as U
+    # the trace of U'Γ is the Frobenius product of U and Γ
+    (CalcLoss == true) && (Loss = real(dot(U, Γ)))
     return (Γ, Loss)
 end
 ```
+`EuclideanDerivative` is evaluated once per iteration and once for every sampling point of the line search, so it dominates the run time. Accept an `AbstractMatrix` so that `U` may live on a GPU.
 The optimization can then be performed via
 ```julia
 # set up your hermitian matrix H and initial unitary U

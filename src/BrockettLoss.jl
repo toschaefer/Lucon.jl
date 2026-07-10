@@ -35,13 +35,13 @@ end
 # wrapper for the optimization function from the Lucon module
 function optimize(
     L::LossFunctional,
-    U::Matrix{T};
+    U::AbstractMatrix{T};
     MinIter=0,
     MaxIter=-1,
     GradNormBreak = 1.0E-10,
     SolverAlgo = "CG-PR",
     PolynomialLineSearchDegree = 5
-)::Tuple{Matrix{T},Float64} where T<:Number
+)::Tuple{AbstractMatrix{T},Float64} where T<:Number
     UDegree = 2
     sgn = +1.0 # maximization
     return Lucon.optimize(
@@ -66,17 +66,18 @@ from the Lucon module.
 """
 function Lucon.EuclideanDerivative(
     L::LossFunctional,
-    U::Matrix{T},
+    U::AbstractMatrix{T},
     CalcLoss::Bool
-)::Tuple{Matrix{T},Float64} where T<:Number
+)::Tuple{AbstractMatrix{T},Float64} where T<:Number
     Loss = 0.0 # the value of the Loss function
     H = L.H # alias
     dim = size(H,1)
     N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
     Γ = H*U*N # Euclidean derivative has same type and dimension as U
-    (CalcLoss == true) && (Loss = real(tr(U'*Γ)))
+    # the trace of U'Γ is the Frobenius product of U and Γ
+    (CalcLoss == true) && (Loss = real(dot(U, Γ)))
     return (Γ, Loss)
-end 
+end
 
 
 

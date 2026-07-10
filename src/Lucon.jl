@@ -18,9 +18,9 @@ abstract type LossFunctional end
 # "empty" implementation of EuclideanDerivative method
 function EuclideanDerivative(
     ::LossFunctional,
-    ::Matrix{T},
+    ::AbstractMatrix{T},
     ::Bool
-)::Tuple{Matrix{T}, Float64} where T<:Number
+)::Tuple{AbstractMatrix{T}, Float64} where T<:Number
     error("EuclideanDerivative method not implemented for this functional type")
 end
 
@@ -49,7 +49,7 @@ Returns the optimal U together with the value of the loss functional at that U.
 """
 function optimize(
     L::LossFunctional,
-    U::Matrix{T},
+    U::AbstractMatrix{T},
     UDegree::Integer,
     sgn::Float64;
     MinIter = 0,
@@ -57,7 +57,7 @@ function optimize(
     GradNormBreak = 1.0E-8,
     SolverAlgo = "CG-PR",
     PolynomialLineSearchDegree = 5
-)::Tuple{Matrix{T},Float64} where T<:Number
+)::Tuple{AbstractMatrix{T},Float64} where T<:Number
 
     # currently only the CG-PR (conjugate gradient Polak-Ribièrre algorithm is implemented)
     if SolverAlgo != "CG-PR"
@@ -66,11 +66,11 @@ function optimize(
     UDegree >= 1 || error("UDegree must be a positive integer")
     PolynomialLineSearchDegree >= 1 || error("PolynomialLineSearchDegree must be a positive integer")
 
-    Gcurr = zeros(T, size(U)) # will hold Riemannian derivative of current Iteration
-    Gprev = zeros(T, size(U)) # will hold Riemannian derivative of previous Iteration
+    Gcurr = zero(U) # will hold Riemannian derivative of current Iteration
+    Gprev = zero(U) # will hold Riemannian derivative of previous Iteration
 
     # init ascent direction H with zeros
-    H = zeros(T, size(U))
+    H = zero(U)
 
     Loss = 0.0 # value of loss function in each Iteration
 
@@ -95,7 +95,7 @@ function optimize(
         Gcurr = Gcurr - Gcurr'
 
         # calculate gradient norm via Frobenius norm
-        GradientNorm = sqrt(real(Gcurr⋅Gcurr))
+        GradientNorm = norm(Gcurr)
 
         output = @sprintf("%6d %11.3e %24.16e\n", Iteration, GradientNorm, Loss)
         @info output
@@ -128,7 +128,7 @@ function optimize(
         end
 
         # find the optimal step size via polynomial line search
-        (U, μ) = RotateUviaPolynomialLineSearch(L, Γ, U, H, UDegree, sgn, PolynomialLineSearchDegree)
+        (U, μ) = RotateUviaPolynomialLineSearch(L, Gcurr, U, H, UDegree, sgn, PolynomialLineSearchDegree)
 
         # a vanishing step size leaves U unchanged and no further progress can be made
         if μ == 0.0
@@ -147,12 +147,15 @@ end # optimize
 
 
 """
-Assemble the rotation matrix R = exp(sgn*μ*H) = VΣV' from the eigenvectors V of the
-skew-hermitian matrix H and the diagonal matrix Σ holding its exponentiated eigenvalues.
+Assemble the rotation matrix R = exp(x*H) from the eigenvectors V and the eigenvalues
+-im*Λ of the skew-hermitian matrix H. The diagonal factor exp(-im*x*Λ) is applied as a
+column scaling of V, which fuses into a single broadcast and leaves the expression free
+of scalar indexing, so that it also runs on a GPU.
 On the orthogonal group H is real and skew-symmetric, so that R is real up to roundoff.
 """
-RotationMatrix(::Type{T}, V, Σ) where T<:Real    = real(V*Σ*V')
-RotationMatrix(::Type{T}, V, Σ) where T<:Complex = V*Σ*V'
+ScaleEigenvectors(V, Λ, x) = V .* transpose(cis.(-x .* Λ))
+RotationMatrix(::Type{T}, V, Λ, x) where T<:Real    = real.(ScaleEigenvectors(V,Λ,x) * V')
+RotationMatrix(::Type{T}, V, Λ, x) where T<:Complex = ScaleEigenvectors(V,Λ,x) * V'
 
 
 
@@ -197,44 +200,43 @@ The procedure is described in section 3.1 in T. Abrudan et al. / Signal Processi
 
 Returns the rotated matrix exp(sgn*μ*H)U together with the step size μ. A step size of zero means
 that the line search found no local optimum along the geodesic, in which case U is returned unchanged.
+`G` is the Riemannian gradient at U, from which the derivative at μ=0 is read off directly.
 """
 function RotateUviaPolynomialLineSearch(
     L::LossFunctional,
-    Γ::Matrix{T},
-    U::Matrix{T},
-    H::Matrix{T},
+    G::AbstractMatrix{T},
+    U::AbstractMatrix{T},
+    H::AbstractMatrix{T},
     UDegree::Integer,
     sgn::Float64,
     PolynomialDegree::Integer
-)::Tuple{Matrix{T},Float64} where T<:Number
+)::Tuple{AbstractMatrix{T},Float64} where T<:Number
 
     # diagonalize the skew symmetric matrix H by
     # constructing the hermitian matrix H*im and diagonalize
-    AuxEigenvals, V = eigen(Hermitian(H*1.0im))
-    Eigenvals = -1.0im * AuxEigenvals # convert back to eigenvalues of H
+    AuxEigenvals, V = eigen(Hermitian(H*1.0im)) # eigenvalues of H are -im*AuxEigenvals
 
     # sampling points of μ = 0*μstep, 1*μstep, 2*μstep, ...
-    maxAbsEigenval = maximum(map(abs,AuxEigenvals))
+    maxAbsEigenval = maximum(abs, AuxEigenvals)
     maxAbsEigenval == 0.0 && return (U, 0.0) # H vanishes only in a stationary point
     μstep = 2.0*pi/PolynomialDegree/UDegree/maxAbsEigenval
 
     # set up rotation matrix exp(sgn*μstep*H)
-    Σ = Diagonal( map(exp, sgn*μstep*Eigenvals) )
-    # calc trafo matrix for U
-    R = RotationMatrix(T, V, Σ)
+    R = RotationMatrix(T, V, AuxEigenvals, sgn*μstep)
 
-    # for every μ>0 we calculate the derivative dLdμ = d/dμ L(exp(sgn*μ*H)U)
+    # for every μ>0 we calculate the derivative dLdμ = d/dμ L(exp(sgn*μ*H)U), see Eq. (14)
+    # in T. Abrudan et al. The trace of Γ(HU)' is its Frobenius product, which spares us
+    # from forming the matrix product itself.
     dLdμ = Array{Float64}(undef, PolynomialDegree)
     rotatedU = copy(U)
     for i = 1:PolynomialDegree
         rotatedU = R*rotatedU
         (rotatedΓ, _) = EuclideanDerivative(L,rotatedU,false)
-        # finally construct dLdμ, see Eq. (14) in T. Abrudan et al., Signal Processing 89 (2009) 1704–1714
-        dLdμ[i] = 2*sgn*real( tr( rotatedΓ*(H*rotatedU)' ) )
+        dLdμ[i] = 2*sgn*real( dot(H*rotatedU, rotatedΓ) )
     end
 
-    # we don't forget the case of μ = 0 and store it separatly
-    dLdμ0 = 2*sgn*real( tr( Γ*(H*U)' ) )
+    # at μ = 0 the derivative is the Frobenius product of H with the Riemannian gradient
+    dLdμ0 = sgn*real( dot(G, H) )
 
     # set up the coefficients for the polynomial by solving the linear System Ma=b for a
     b = dLdμ .- dLdμ0
@@ -251,8 +253,7 @@ function RotateUviaPolynomialLineSearch(
     μOpt === nothing && return (U, 0.0)
 
     # rotate U with optimal μ: rotatedU = exp(sgn*μOpt*H) U
-    Σ = Diagonal( map(exp, sgn*μOpt*Eigenvals) )
-    rotatedU = RotationMatrix(T, V, Σ) * U
+    rotatedU = RotationMatrix(T, V, AuxEigenvals, sgn*μOpt) * U
 
     return (rotatedU, μOpt)
 end
