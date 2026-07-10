@@ -71,7 +71,8 @@ The `optimize` function above is a thin wrapper around `Lucon.optimize`, which t
     MinIter=0, 
     MaxIter=typemax(Int), 
     MaxGradientTolerance=1.0e-8, 
-    PolynomialLineSearchDegree=5)
+    PolynomialLineSearchDegree=5,
+    Callback=nothing)
 ```
 * `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans. For the Brockett criterion above $q=2$.
 * `sgn` is `+1.0` to maximize and `-1.0` to minimize $L(U)$.
@@ -79,6 +80,25 @@ The `optimize` function above is a thin wrapper around `Lucon.optimize`, which t
 The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type. `MaxIter` limits the number of rotations of `U` and is unlimited by default.
 
 Convergence is reached once the largest absolute element of the Riemannian gradient $G$ drops below `MaxGradientTolerance`. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $N$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{N}$. One and the same `MaxGradientTolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom. 
+
+## Following the iteration
+
+`optimize` prints nothing. Progress is reported through `Callback`, a function which is called once per iteration with the named tuple `(; Iteration, MaxGradient, Loss, U)` and which stops the iteration when it returns `true`. To print a convergence trace, pass the ready-made `Lucon.PrintTrace`:
+```julia
+(U, Loss) = optimize(L, U, Callback=Lucon.PrintTrace())   # or Lucon.PrintTrace(stderr)
+```
+```
+ #iter   max|grad|            loss-function
+     1   2.136e+00  -1.2117919646339959e+00
+     2   1.929e+00   3.4753409237499291e+00
+     3   1.604e+00   6.7459345042215935e+00
+```
+The callback is equally the place to record a convergence history, to checkpoint `U`, or to stop on a criterion of your own:
+```julia
+History = Float64[]
+(U, Loss) = optimize(L, U, Callback = State -> (push!(History, State.Loss); State.Iteration ≥ 100))
+```
+The reason for which the iteration stopped is emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
 
 ## How to cite?
 

@@ -1,14 +1,10 @@
 using Lucon
 using Test
 using LinearAlgebra
-using Logging
 using Random
 
 include("../src/BrockettLoss.jl")
 import .BrockettLoss
-
-# the optimizer reports on every iteration, which would drown the test output
-silent(f) = with_logger(f, NullLogger())
 
 # the Brockett criterion L(U) = tr(U'HUN) with N_nm = n δ_nm
 BrockettLossValue(H, U) = real(tr(U' * H * U * Diagonal(1.0:size(H,1))))
@@ -25,9 +21,7 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
     @testset "unitary group" begin
         BL = BrockettLoss.LossFunctional(Hcomplex)
         (U, _) = qr(rand(rng,dim,dim) .- 0.5 + (rand(rng,dim,dim) .- 0.5)*im)
-        (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix(U), MaxGradientTolerance=1.0E-8)
-        end
+        (U, _) = BrockettLoss.optimize(BL, Matrix(U), MaxGradientTolerance=1.0E-8)
         Σdiff = Diagonal(eigen(Hcomplex).values) - U'*Hcomplex*U
         @test (√real(Σdiff⋅Σdiff)) < 1.0E-7 # should be < 1.0E-7 if MaxGradientTolerance=1.0E-8
     end
@@ -36,9 +30,7 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
     # direction and the rotation exp(μH) it generates are complex
     @testset "unitary group, starting from the identity" begin
         BL = BrockettLoss.LossFunctional(Hcomplex)
-        (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix{ComplexF64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
-        end
+        (U, _) = BrockettLoss.optimize(BL, Matrix{ComplexF64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
         @test norm(U'*U - I) < 1.0E-10
         Σdiff = Diagonal(eigen(Hcomplex).values) - U'*Hcomplex*U
         @test (√real(Σdiff⋅Σdiff)) < 1.0E-7
@@ -47,9 +39,7 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
     # a real symmetric matrix has to stay on the orthogonal group
     @testset "orthogonal group" begin
         BL = BrockettLoss.LossFunctional(Hreal)
-        (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix{Float64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
-        end
+        (U, _) = BrockettLoss.optimize(BL, Matrix{Float64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
         @test eltype(U) == Float64
         @test norm(U'*U - I) < 1.0E-10
         Σdiff = Diagonal(eigen(Hreal).values) - U'*Hreal*U
@@ -61,15 +51,28 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
         BL = BrockettLoss.LossFunctional(Hcomplex)
         U0 = Matrix{ComplexF64}(I,dim,dim)
         for MaxIter in (0, 1, 5)
-            (U, Loss) = silent() do
-                BrockettLoss.optimize(BL, copy(U0), MaxIter=MaxIter)
-            end
+            (U, Loss) = BrockettLoss.optimize(BL, copy(U0), MaxIter=MaxIter)
             @test Loss ≈ BrockettLossValue(Hcomplex, U)
         end
-        (U, _) = silent() do
-            BrockettLoss.optimize(BL, copy(U0), MaxIter=0)
-        end
+        (U, _) = BrockettLoss.optimize(BL, copy(U0), MaxIter=0)
         @test U == U0
+    end
+
+    # optimize prints nothing by itself and reports its progress through the callback
+    @testset "callback" begin
+        BL = BrockettLoss.LossFunctional(Hcomplex)
+        U0 = Matrix{ComplexF64}(I,dim,dim)
+
+        @test_logs BrockettLoss.optimize(BL, copy(U0), MaxIter=3) # asserts that nothing is logged
+
+        Trace = Int[]
+        BrockettLoss.optimize(BL, copy(U0), MaxIter=3,
+                              Callback = State -> (push!(Trace, State.Iteration); false))
+        @test Trace == 1:4 # the callback also sees the iterate that MaxIter breaks on
+
+        # a callback which returns true stops the iteration, leaving U and Loss consistent
+        (U, Loss) = BrockettLoss.optimize(BL, copy(U0), Callback = State -> State.Iteration == 3)
+        @test Loss ≈ BrockettLossValue(Hcomplex, U)
     end
 
     # the line search reports a step size of zero rather than throwing

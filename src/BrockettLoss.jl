@@ -36,25 +36,12 @@ end
 function optimize(
     L::LossFunctional,
     U::AbstractMatrix{T};
-    MinIter::Integer = 0,
-    MaxIter::Integer = typemax(Int),
     MaxGradientTolerance::Real = 1.0E-10,
-    SolverAlgo::Symbol = :CGPR,
-    PolynomialLineSearchDegree::Integer = 5
+    kwargs...
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
     UDegree = 2
     sgn = +1.0 # maximization
-    return Lucon.optimize(
-        L,
-	U,
-	UDegree,
-	sgn,
-	MinIter=MinIter,
-	MaxIter=MaxIter,
-	MaxGradientTolerance=MaxGradientTolerance,
-	SolverAlgo=SolverAlgo,
-	PolynomialLineSearchDegree=PolynomialLineSearchDegree
-    )
+    return Lucon.optimize(L, U, UDegree, sgn; MaxGradientTolerance, kwargs...)
 end
 
 

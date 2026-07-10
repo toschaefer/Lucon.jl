@@ -9,11 +9,26 @@ module Lucon
 
 using LinearAlgebra
 using Printf
-using Logging
 
 export optimize
 
 abstract type LossFunctional end
+
+
+"""
+Callback for `optimize` which prints the iteration count, the largest absolute element of the
+Riemannian gradient and the value of the loss functional, one line per iteration.
+"""
+struct PrintTrace
+    io::IO
+end
+PrintTrace() = PrintTrace(stdout)
+
+function (Trace::PrintTrace)(State)
+    State.Iteration == 1 && println(Trace.io, " #iter   max|grad|            loss-function")
+    @printf(Trace.io, "%6d %11.3e %24.16e\n", State.Iteration, State.MaxGradient, State.Loss)
+    return false
+end
 
 # "empty" implementation of EuclideanDerivative method
 function EuclideanDerivative(
@@ -47,6 +62,10 @@ Keyword arguments:
   supersystem built from copies of it to the same accuracy.
 * `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, `:CGPR`.
 * `PolynomialLineSearchDegree`: the order P of the polynomial used in the line search, 3 to 5.
+* `Callback`: a function called once per iteration with the named tuple
+  `(; Iteration, MaxGradient, Loss, U)`, before the break conditions are tested. Returning
+  `true` from it stops the iteration. `optimize` prints nothing on its own; pass
+  `Lucon.PrintTrace()` to obtain a convergence trace on `stdout`.
 
 Returns the optimal U together with the value of the loss functional at that U.
 """
@@ -59,7 +78,8 @@ function optimize(
     MaxIter::Integer = typemax(Int),
     MaxGradientTolerance::Real = 1.0E-8,
     SolverAlgo::Symbol = :CGPR,
-    PolynomialLineSearchDegree::Integer = 5
+    PolynomialLineSearchDegree::Integer = 5,
+    Callback = nothing
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
 
     # currently only the CG-PR (conjugate gradient Polak-Ribièrre algorithm is implemented)
@@ -80,10 +100,6 @@ function optimize(
 
     Loss = 0.0 # value of loss function in each Iteration
 
-    # some output
-    @info "in Lucon.optimize"
-    @info " #iter   max|grad|            loss-function"
-
     # the main iteration loop (break condition via the gradient, MaxIter or the step size)
     Iteration = 0
     Message = "reached break condition: maximum number of iterations"
@@ -101,7 +117,11 @@ function optimize(
         # the maximum norm of the gradient does not grow with the size of the system
         MaxGradient = maximum(abs, Gcurr)
 
-        @info @sprintf("%6d %11.3e %24.16e", Iteration, MaxGradient, Loss)
+        # a callback which returns true asks the iteration to stop
+        if Callback !== nothing && Callback((; Iteration, MaxGradient, Loss, U)) === true
+            Message = "reached break condition: the callback asked to stop"
+            break
+        end
 
         # check if convergence is reached
         if MaxGradient < MaxGradientTolerance && Iteration > MinIter
@@ -142,7 +162,7 @@ function optimize(
 
     end
 
-    @info Message
+    @debug Message
 
     return (U,Loss)
 end # optimize
