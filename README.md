@@ -25,57 +25,76 @@ Pkg.add("Lucon")
 
 ## Usage
 
-In order to use Lucon to optimize a loss functional $L(U)$ one has provide a Julia function that calculates the Eucledean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$. For the above example (Brockett criterion) the Eucledean derivative simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$.  
+In order to use Lucon to optimize a loss functional $L(U)$ one has to provide a Julia function that calculates the Eucledean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$. For the above example (Brockett criterion) the Eucledean derivative simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$.
 
-To this end a sub-type of the abstract type ```Lucon.LossFunctional``` has to be defined which can hold all quantities necessary for the loss functional (for the example, it is only the hermitian matrix $H$).
-The Eucledean derivative has to be provided by overloading the function ```Lucon.EuclideanDerivative```.
+The loss functional is any callable `Gradient(U, CalcLoss)` returning the tuple `(Γ, Loss)`. The value of the loss is only read when `CalcLoss` is `true`, so its computation may be skipped otherwise. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
 
 ```julia
 import Lucon
+using LinearAlgebra
 
-struct LossFunctional <: Lucon.LossFunctional
-    H::Hermitian{<:Number}
-end
-
-function Lucon.EuclideanDerivative(
-    L::LossFunctional,
-    U::AbstractMatrix{T},
-    CalcLoss::Bool
-)::Tuple{AbstractMatrix{T},Float64} where T<:Number
-    Loss = 0.0 # the value of the Loss functional
-    dim = size(L.H,1)
-    N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
-    Γ = L.H*U*N # Euclidean derivative has same type and dimension as U
-    # the trace of U'Γ is the Frobenius product of U and Γ
-    CalcLoss && (Loss = real(dot(U, Γ)))
-    return (Γ, Loss)
-end
-```
-`EuclideanDerivative` is evaluated once per iteration and once for every sampling point of the line search, so it dominates the run time. Accept an `AbstractMatrix` so that `U` may live on a GPU.
-The optimization can then be performed via
-```julia
 # set up your hermitian matrix H and initial unitary U
-L = LossFunctional(H)
-(U, Loss) = optimize(L,U)
+N = Diagonal([1.0*n for n=1:size(H,1)]) # the N matrix is a diagonal matrix with entries N_nn = n
+
+Result = Lucon.optimize(U; UDegree=2, Maximize=true) do U, CalcLoss
+    Γ = H*U*N # Euclidean derivative has same type and dimension as U
+    # the trace of U'Γ is the Frobenius product of U and Γ
+    (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
+end
 ```
+
+When the functional has to carry precomputed quantities, give them to a struct and make the struct callable. Store them with a concrete type and build them once, since the functional is evaluated once per iteration and once for every sampling point of the line search, and therefore dominates the run time:
+
+```julia
+struct BrockettCriterion{T<:Number, A<:AbstractMatrix{T}}
+    H::Hermitian{T,A}
+    N::Diagonal{Float64,Vector{Float64}}
+end
+
+BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal([1.0*n for n=1:size(H,1)]))
+
+function (B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool)
+    Γ = B.H*U*B.N
+    (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
+end
+
+Result = Lucon.optimize(BrockettCriterion(H), U; UDegree=2, Maximize=true)
+```
+Accept an `AbstractMatrix` so that `U` may live on a GPU.
 The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).  
 Both can be used as a **template** to implement arbitrary loss functionals.
 
-The `optimize` function above is a thin wrapper around `Lucon.optimize`, which takes two further positional arguments:
+`optimize` returns a `Lucon.Result`:
 ```julia
-(U, Loss) = Lucon.optimize(
-    L, 
-    U, 
+julia> Result
+Lucon.Result
+  Status:      converged
+  Iterations:  79
+  Loss:        9.5330162221636101e+00
+  max|grad|:   4.030e-09
+  U:           6×6 Matrix{ComplexF64}
+
+julia> Lucon.Converged(Result)
+true
+```
+`Status` is one of `:converged`, `:maxiter`, `:callback`, or `:linesearch` if the line search found no positive step size.
+
+The full signature reads
+```julia
+Result = Lucon.optimize(
+    Gradient, 
+    U; 
     UDegree, 
-    sgn; 
+    Maximize=false, 
     MinIter=0, 
     MaxIter=typemax(Int), 
     MaxGradientTolerance=1.0e-8, 
     PolynomialLineSearchDegree=5,
-    Callback=nothing)
+    Callback=nothing
+)
 ```
-* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans. For the Brockett criterion above $q=2$.
-* `sgn` is `+1.0` to maximize and `-1.0` to minimize $L(U)$.
+* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans. It has no default because it is a property of the functional. For the Brockett criterion above $q=2$.
+* `Maximize` maximizes $L(U)$ instead of minimizing it.
 
 The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type. `MaxIter` limits the number of rotations of `U` and is unlimited by default.
 
@@ -85,7 +104,7 @@ Convergence is reached once the largest absolute element of the Riemannian gradi
 
 `optimize` prints nothing. Progress is reported through `Callback`, a function which is called once per iteration with the named tuple `(; Iteration, MaxGradient, Loss, U)` and which stops the iteration when it returns `true`. To print a convergence trace, pass the ready-made `Lucon.PrintTrace`:
 ```julia
-(U, Loss) = optimize(L, U, Callback=Lucon.PrintTrace())   # or Lucon.PrintTrace(stderr)
+Result = Lucon.optimize(Gradient, U; UDegree=2, Callback=Lucon.PrintTrace())   # or Lucon.PrintTrace(stderr)
 ```
 ```
  #iter   max|grad|            loss-function
@@ -96,9 +115,10 @@ Convergence is reached once the largest absolute element of the Riemannian gradi
 The callback is equally the place to record a convergence history, to checkpoint `U`, or to stop on a criterion of your own:
 ```julia
 History = Float64[]
-(U, Loss) = optimize(L, U, Callback = State -> (push!(History, State.Loss); State.Iteration ≥ 100))
+Result = Lucon.optimize(Gradient, U; UDegree=2,
+                        Callback = State -> (push!(History, State.Loss); State.Iteration ≥ 100))
 ```
-The reason for which the iteration stopped is emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
+A callback which stopped the iteration leaves `Result.Status == :callback`. The reason for which the iteration stopped is in addition emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
 
 ## How to cite?
 

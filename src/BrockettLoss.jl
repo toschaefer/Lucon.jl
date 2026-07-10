@@ -20,54 +20,40 @@ using LinearAlgebra
 import Lucon
 
 
-export optimize
-
-
 """
-The loss functional contains the hermitian matrix to be diagonalized
+The Brockett criterion, holding the hermitian matrix H to be diagonalized and the diagonal
+matrix N. Both are stored with a concrete type, and N is built once rather than on every call.
 """
-struct LossFunctional <: Lucon.LossFunctional
-    H::Hermitian{<:Number}
+struct BrockettCriterion{T<:Number, A<:AbstractMatrix{T}}
+    H::Hermitian{T,A}
+    N::Diagonal{Float64,Vector{Float64}}
 end
 
-
-
-# wrapper for the optimization function from the Lucon module
-function optimize(
-    L::LossFunctional,
-    U::AbstractMatrix{T};
-    MaxGradientTolerance::Real = 1.0E-10,
-    kwargs...
-)::Tuple{AbstractMatrix{T},Float64} where T<:Number
-    UDegree = 2
-    sgn = +1.0 # maximization
-    return Lucon.optimize(L, U, UDegree, sgn; MaxGradientTolerance, kwargs...)
-end
-
+# the N matrix is a diagonal matrix with entries N_nn = n
+BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal([1.0*n for n=1:size(H,1)]))
 
 
 """
-Calculate and return the Euclidean derivative of the loss functional and the loss
-function itself. This function overloads the empty function EuclideanDerivative
-from the Lucon module.
+Calculate and return the Euclidean derivative of the loss functional and, if `CalcLoss` is
+set, the loss itself. Making the functional callable is all that `Lucon.optimize` requires.
 """
-function Lucon.EuclideanDerivative(
-    L::LossFunctional,
-    U::AbstractMatrix{T},
-    CalcLoss::Bool
-)::Tuple{AbstractMatrix{T},Float64} where T<:Number
-    Loss = 0.0 # the value of the Loss function
-    H = L.H # alias
-    dim = size(H,1)
-    N = Diagonal([1.0*n for n=1:dim]) # the N matrix is a diagonal matrix with entries N_nn = n
-    Γ = H*U*N # Euclidean derivative has same type and dimension as U
+function (B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool)
+    Γ = B.H*U*B.N # Euclidean derivative has same type and dimension as U
     # the trace of U'Γ is the Frobenius product of U and Γ
-    CalcLoss && (Loss = real(dot(U, Γ)))
+    Loss = CalcLoss ? real(dot(U, Γ)) : 0.0
     return (Γ, Loss)
 end
 
 
+# wrapper for the optimization function from the Lucon module
+function optimize(
+    B::BrockettCriterion,
+    U::AbstractMatrix;
+    MaxGradientTolerance::Real = 1.0E-10,
+    kwargs...
+)
+    return Lucon.optimize(B, U; UDegree=2, Maximize=true, MaxGradientTolerance, kwargs...)
+end
+
 
 end # module BrockettLoss
-
-

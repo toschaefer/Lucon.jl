@@ -10,9 +10,40 @@ module Lucon
 using LinearAlgebra
 using Printf
 
-export optimize
 
-abstract type LossFunctional end
+"""
+The outcome of `optimize`.
+
+* `U`: the optimal unitary matrix.
+* `Loss`: the value of the loss functional at `U`.
+* `MaxGradient`: the largest absolute element of the Riemannian gradient at `U`.
+* `Iterations`: the number of rotations of `U` that were performed, the quantity bounded by `MaxIter`.
+* `Status`: why the iteration stopped. One of `:converged`, `:maxiter`, `:callback`, or
+  `:linesearch` if the line search found no positive step size.
+
+Use `Lucon.Converged` to ask whether `MaxGradientTolerance` was reached.
+"""
+struct Result{M<:AbstractMatrix}
+    U::M
+    Loss::Float64
+    MaxGradient::Float64
+    Iterations::Int
+    Status::Symbol
+end
+
+"""
+Did `optimize` reach the requested `MaxGradientTolerance`?
+"""
+Converged(Res::Result) = Res.Status === :converged
+
+function Base.show(io::IO, ::MIME"text/plain", Res::Result)
+    println(io, "Lucon.Result")
+    println(io, "  Status:      ", Res.Status)
+    println(io, "  Iterations:  ", Res.Iterations)
+    @printf(io, "  Loss:        %.16e\n", Res.Loss)
+    @printf(io, "  max|grad|:   %.3e\n", Res.MaxGradient)
+      print(io, "  U:           ", summary(Res.U))
+end
 
 
 """
@@ -30,30 +61,23 @@ function (Trace::PrintTrace)(State)
     return false
 end
 
-# "empty" implementation of EuclideanDerivative method
-function EuclideanDerivative(
-    ::LossFunctional,
-    ::AbstractMatrix{T},
-    ::Bool
-)::Tuple{AbstractMatrix{T}, Float64} where T<:Number
-    error("EuclideanDerivative method not implemented for this functional type")
-end
-
 
 """
 Calculate the optimal unitary matrix U iteratively.
 
 Arguments:
-* `L`: the loss functional, a sub-type of `Lucon.LossFunctional` which provides a method
-  `Lucon.EuclideanDerivative`.
+* `Gradient`: a callable `Gradient(U, CalcLoss::Bool)` which returns the tuple `(Γ, Loss)`.
+  Here Γ_ij = ∂L/∂conj(U_ij) is the Euclidean derivative of the loss functional L at U. The
+  value of L is only read when `CalcLoss` is true, so computing it may be skipped otherwise.
+  Any callable will do, in particular a closure or a struct carrying precomputed quantities.
 * `U`: the initial unitary matrix. Its element type selects the group the optimization runs
   on, the orthogonal group for a real and the unitary group for a complex element type.
+
+Keyword arguments:
 * `UDegree`: the order q of the loss functional, i.e. the highest power of t appearing in the
   Taylor expansion of L(U + tZ). It sets the width T_μ = 2π/(q|ω_max|) of the line search
   window, see Eq. (15) in T. Abrudan et al.
-* `sgn`: +1.0 to maximize and -1.0 to minimize the loss functional.
-
-Keyword arguments:
+* `Maximize`: maximize the loss functional instead of minimizing it.
 * `MinIter`: no convergence is signalled before this number of iterations is reached.
 * `MaxIter`: upper limit for the number of rotations of U, by default unlimited.
 * `MaxGradientTolerance`: convergence threshold for the largest absolute element of the
@@ -67,20 +91,26 @@ Keyword arguments:
   `true` from it stops the iteration. `optimize` prints nothing on its own; pass
   `Lucon.PrintTrace()` to obtain a convergence trace on `stdout`.
 
-Returns the optimal U together with the value of the loss functional at that U.
+Returns a `Lucon.Result`. Since the loss functional is an ordinary callable, `optimize` may be
+called with `do` syntax:
+
+    Result = Lucon.optimize(U; UDegree=2, Maximize=true) do U, CalcLoss
+        Γ = H*U*N
+        (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
+    end
 """
 function optimize(
-    L::LossFunctional,
-    U::AbstractMatrix{T},
+    Gradient,
+    U::AbstractMatrix{T};
     UDegree::Integer,
-    sgn::Real;
+    Maximize::Bool = false,
     MinIter::Integer = 0,
     MaxIter::Integer = typemax(Int),
     MaxGradientTolerance::Real = 1.0E-8,
     SolverAlgo::Symbol = :CGPR,
     PolynomialLineSearchDegree::Integer = 5,
     Callback = nothing
-)::Tuple{AbstractMatrix{T},Float64} where T<:Number
+)::Result where T<:Number
 
     # currently only the CG-PR (conjugate gradient Polak-Ribièrre algorithm is implemented)
     SolverAlgo === :CGPR || throw(ArgumentError("algorithm :$SolverAlgo currently not supported in Lucon"))
@@ -89,26 +119,25 @@ function optimize(
     MinIter >= 0 || throw(ArgumentError("MinIter must be non-negative"))
     MaxIter >= 0 || throw(ArgumentError("MaxIter must be non-negative"))
 
-    # renormalize sgn to +1.0 or -1.0, a vanishing sgn leaves no direction to move along
-    sgn = float(sign(sgn))
-    iszero(sgn) && throw(ArgumentError("sgn must be positive (maximize) or negative (minimize)"))
+    sgn = Maximize ? +1.0 : -1.0
 
     Gprev = zero(U) # will hold Riemannian derivative of previous Iteration
 
     # init ascent direction H with zeros
     H = zero(U)
 
-    Loss = 0.0 # value of loss function in each Iteration
+    Loss = 0.0        # value of loss function in each Iteration
+    MaxGradient = 0.0 # largest absolute element of the Riemannian gradient
 
     # the main iteration loop (break condition via the gradient, MaxIter or the step size)
     Iteration = 0
-    Message = "reached break condition: maximum number of iterations"
+    Status = :maxiter
     while true
 
         Iteration += 1
 
         # get Eucledean derivative Γ and Loss function
-        (Γ, Loss) = EuclideanDerivative(L,U,true)
+        (Γ, Loss) = Gradient(U, true)
 
         # construct current Riemannian derivative Gcurr, see Eq. (2)
         Gcurr = Γ * U'
@@ -119,13 +148,13 @@ function optimize(
 
         # a callback which returns true asks the iteration to stop
         if Callback !== nothing && Callback((; Iteration, MaxGradient, Loss, U)) === true
-            Message = "reached break condition: the callback asked to stop"
+            Status = :callback
             break
         end
 
         # check if convergence is reached
         if MaxGradient < MaxGradientTolerance && Iteration > MinIter
-            Message = "reached break condition: largest gradient element below MaxGradientTolerance"
+            Status = :converged
             break
         end
 
@@ -151,20 +180,21 @@ function optimize(
         end
 
         # find the optimal step size via polynomial line search
-        (U, μ) = RotateUviaPolynomialLineSearch(L, Gcurr, U, H, UDegree, sgn, PolynomialLineSearchDegree)
+        (U, μ) = RotateUviaPolynomialLineSearch(Gradient, Gcurr, U, H, UDegree, sgn, PolynomialLineSearchDegree)
 
         # a vanishing step size leaves U unchanged and no further progress can be made
-        if μ == 0.0
+        if iszero(μ)
             @warn "Lucon.optimize: line search found no positive step size"
-            Message = "reached break condition: line search found no step size"
+            Status = :linesearch
             break
         end
 
     end
 
-    @debug Message
+    @debug "Lucon.optimize stopped with status :$Status"
 
-    return (U,Loss)
+    # every break condition is tested before U is rotated, so one rotation less than iterations
+    return Result(U, Loss, MaxGradient, Iteration - 1, Status)
 end # optimize
 
 
@@ -222,7 +252,7 @@ that the line search found no local optimum along the geodesic, in which case U 
 `G` is the Riemannian gradient at U, from which the derivative at μ=0 is read off directly.
 """
 function RotateUviaPolynomialLineSearch(
-    L::LossFunctional,
+    Gradient,
     G::AbstractMatrix{T},
     U::AbstractMatrix{T},
     H::AbstractMatrix{T},
@@ -250,7 +280,7 @@ function RotateUviaPolynomialLineSearch(
     rotatedU = copy(U)
     for i = 1:PolynomialDegree
         rotatedU = R*rotatedU
-        (rotatedΓ, _) = EuclideanDerivative(L,rotatedU,false)
+        (rotatedΓ, _) = Gradient(rotatedU, false)
         dLdμ[i] = 2*sgn*real( dot(H*rotatedU, rotatedΓ) )
     end
 
@@ -278,4 +308,3 @@ function RotateUviaPolynomialLineSearch(
 end
 
 end # Lucon
-
