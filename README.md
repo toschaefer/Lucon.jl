@@ -100,11 +100,16 @@ The element type of the initial `U` selects the group that is optimized over, th
 
 Convergence is reached once the largest absolute element of the Riemannian gradient $G$ drops below `MaxGradientTolerance`. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $N$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{N}$. One and the same `MaxGradientTolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom. 
 
-## Following the iteration
+## Output
 
 `optimize` prints nothing. Progress is reported through `Callback`, a function which is called once per iteration with the named tuple `(; Iteration, MaxGradient, Loss, U)` and which stops the iteration when it returns `true`. To print a convergence trace, pass the ready-made `Lucon.PrintTrace`:
 ```julia
-Result = Lucon.optimize(Gradient, U; UDegree=2, Callback=Lucon.PrintTrace())   # or Lucon.PrintTrace(stderr)
+Result = Lucon.optimize(
+    Gradient, 
+    U; 
+    UDegree=2, 
+    Callback=Lucon.PrintTrace() # or Lucon.PrintTrace(stderr)
+)
 ```
 ```
  #iter   max|grad|            loss-function
@@ -115,8 +120,14 @@ Result = Lucon.optimize(Gradient, U; UDegree=2, Callback=Lucon.PrintTrace())   #
 The callback is equally the place to record a convergence history, to checkpoint `U`, or to stop on a criterion of your own:
 ```julia
 History = Float64[]
-Result = Lucon.optimize(Gradient, U; UDegree=2,
-                        Callback = State -> (push!(History, State.Loss); State.Iteration ≥ 100))
+RecordLoss(State) = (push!(History, State.Loss); State.Iteration ≥ 100)
+
+Result = Lucon.optimize(
+    Gradient, 
+    U; 
+    UDegree=2, 
+    Callback=RecordLoss
+)
 ```
 A callback which stopped the iteration leaves `Result.Status == :callback`. The reason for which the iteration stopped is in addition emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
 
