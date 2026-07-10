@@ -41,7 +41,10 @@ Arguments:
 Keyword arguments:
 * `MinIter`: no convergence is signalled before this number of iterations is reached.
 * `MaxIter`: upper limit for the number of rotations of U, a negative value means no limit.
-* `GradNormBreak`: convergence threshold for the Frobenius norm of the Riemannian gradient.
+* `MaxGradientTolerance`: convergence threshold for the largest absolute element of the
+  Riemannian gradient. Unlike the Frobenius norm, this maximum norm is independent of the
+  size of the system, so that one and the same threshold converges a subsystem and a
+  supersystem built from copies of it to the same accuracy.
 * `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, "CG-PR".
 * `PolynomialLineSearchDegree`: the order P of the polynomial used in the line search, 3 to 5.
 
@@ -54,7 +57,7 @@ function optimize(
     sgn::Float64;
     MinIter = 0,
     MaxIter = -1,
-    GradNormBreak = 1.0E-8,
+    MaxGradientTolerance = 1.0E-8,
     SolverAlgo = "CG-PR",
     PolynomialLineSearchDegree = 5
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
@@ -78,9 +81,9 @@ function optimize(
 
     # some output
     @info "in Lucon.optimize"
-    @info " #iter  grad. norm            loss-function"
+    @info " #iter   max|grad|            loss-function"
 
-    # the main iteration loop (break condition via GradientNorm, MaxIter or the step size)
+    # the main iteration loop (break condition via the gradient, MaxIter or the step size)
     Iteration = 0
     Message = "reached break condition: maximum number of iterations"
     while true
@@ -94,15 +97,15 @@ function optimize(
         Gcurr = Γ * U'
         Gcurr = Gcurr - Gcurr'
 
-        # calculate gradient norm via Frobenius norm
-        GradientNorm = norm(Gcurr)
+        # the maximum norm of the gradient does not grow with the size of the system
+        MaxGradient = maximum(abs, Gcurr)
 
-        output = @sprintf("%6d %11.3e %24.16e\n", Iteration, GradientNorm, Loss)
+        output = @sprintf("%6d %11.3e %24.16e\n", Iteration, MaxGradient, Loss)
         @info output
 
         # check if convergence is reached
-        if GradientNorm < GradNormBreak && Iteration > MinIter
-            Message = "reached break condition: gradient norm below GradNormBreak"
+        if MaxGradient < MaxGradientTolerance && Iteration > MinIter
+            Message = "reached break condition: largest gradient element below MaxGradientTolerance"
             break
         end
 

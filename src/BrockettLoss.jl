@@ -38,7 +38,7 @@ function optimize(
     U::AbstractMatrix{T};
     MinIter=0,
     MaxIter=-1,
-    GradNormBreak = 1.0E-10,
+    MaxGradientTolerance = 1.0E-10,
     SolverAlgo = "CG-PR",
     PolynomialLineSearchDegree = 5
 )::Tuple{AbstractMatrix{T},Float64} where T<:Number
@@ -51,7 +51,7 @@ function optimize(
 	sgn,
 	MinIter=MinIter,
 	MaxIter=MaxIter,
-	GradNormBreak=GradNormBreak,
+	MaxGradientTolerance=MaxGradientTolerance,
 	SolverAlgo=SolverAlgo,
 	PolynomialLineSearchDegree=PolynomialLineSearchDegree
     )

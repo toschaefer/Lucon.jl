@@ -26,10 +26,10 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
         BL = BrockettLoss.LossFunctional(Hcomplex)
         (U, _) = qr(rand(rng,dim,dim) .- 0.5 + (rand(rng,dim,dim) .- 0.5)*im)
         (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix(U), GradNormBreak=1.0E-8)
+            BrockettLoss.optimize(BL, Matrix(U), MaxGradientTolerance=1.0E-8)
         end
         Σdiff = Diagonal(eigen(Hcomplex).values) - U'*Hcomplex*U
-        @test (√real(Σdiff⋅Σdiff)) < 1.0E-7 # should be < 1.0E-7 if GradNormBreak=1.0E-8
+        @test (√real(Σdiff⋅Σdiff)) < 1.0E-7 # should be < 1.0E-7 if MaxGradientTolerance=1.0E-8
     end
 
     # the identity is a real valued matrix, but on the unitary group both the ascent
@@ -37,7 +37,7 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
     @testset "unitary group, starting from the identity" begin
         BL = BrockettLoss.LossFunctional(Hcomplex)
         (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix{ComplexF64}(I,dim,dim), GradNormBreak=1.0E-8)
+            BrockettLoss.optimize(BL, Matrix{ComplexF64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
         end
         @test norm(U'*U - I) < 1.0E-10
         Σdiff = Diagonal(eigen(Hcomplex).values) - U'*Hcomplex*U
@@ -48,7 +48,7 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
     @testset "orthogonal group" begin
         BL = BrockettLoss.LossFunctional(Hreal)
         (U, _) = silent() do
-            BrockettLoss.optimize(BL, Matrix{Float64}(I,dim,dim), GradNormBreak=1.0E-8)
+            BrockettLoss.optimize(BL, Matrix{Float64}(I,dim,dim), MaxGradientTolerance=1.0E-8)
         end
         @test eltype(U) == Float64
         @test norm(U'*U - I) < 1.0E-10
