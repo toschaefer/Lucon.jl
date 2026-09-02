@@ -112,11 +112,13 @@ Result = Lucon.optimize(
 )
 ```
 ```
- #iter   max|grad|            loss-function
-     1   2.136e+00  -1.2117919646339959e+00
-     2   1.929e+00   3.4753409237499291e+00
-     3   1.604e+00   6.7459345042215935e+00
+ #iter   max|grad|            loss-function        time [s]
+     1   1.255e+02   3.7242456619410751e+02               -
+     2   1.242e+02   3.1304466586705155e+04       3.223e+00
+     3   9.906e+01   4.2986426663711449e+04       2.475e-01
+     4   5.966e+01   5.1104471129939884e+04       1.778e-01
 ```
+The last column is the wall clock time one iteration took. The first line carries no time because the callback is called from within the iteration it would measure, and the second line usually still contains the time it took to compile the line search.
 The callback is equally the place to record a convergence history, to checkpoint `U`, or to stop on a criterion of your own:
 ```julia
 History = Float64[]

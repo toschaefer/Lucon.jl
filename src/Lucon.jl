@@ -48,16 +48,27 @@ end
 
 """
 Callback for `optimize` which prints the iteration count, the largest absolute element of the
-Riemannian gradient and the value of the loss functional, one line per iteration.
+Riemannian gradient, the value of the loss functional and the wall clock time one iteration took,
+one line per iteration. The first line carries no time, since the callback is called from within
+the iteration it would measure.
 """
-struct PrintTrace
+mutable struct PrintTrace
     io::IO
+    PreviousTime::UInt64
 end
-PrintTrace() = PrintTrace(stdout)
+PrintTrace(io::IO = stdout) = PrintTrace(io, zero(UInt64))
 
 function (Trace::PrintTrace)(State)
-    State.Iteration == 1 && println(Trace.io, " #iter   max|grad|            loss-function")
-    @printf(Trace.io, "%6d %11.3e %24.16e\n", State.Iteration, State.MaxGradient, State.Loss)
+    Now = time_ns()
+    if State.Iteration == 1
+        println(Trace.io, " #iter   max|grad|            loss-function        time [s]")
+        @printf(Trace.io, "%6d %11.3e %24.16e %15s\n",
+                State.Iteration, State.MaxGradient, State.Loss, "-")
+    else
+        @printf(Trace.io, "%6d %11.3e %24.16e %15.2e\n",
+                State.Iteration, State.MaxGradient, State.Loss, (Now - Trace.PreviousTime)/1.0E9)
+    end
+    Trace.PreviousTime = Now
     return false
 end
 
