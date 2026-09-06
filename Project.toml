@@ -1,13 +1,15 @@
 name = "Lucon"
 uuid = "ee70d37e-021e-48ac-98f1-58dad3ba901e"
-authors = ["Tobias Schäfer"]
 version = "0.2.0"
+authors = ["Tobias Schäfer"]
 
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]
+Aqua = "0.8.16"
 julia = "1.10"
 
 [extras]

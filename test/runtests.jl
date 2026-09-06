@@ -1,5 +1,6 @@
 using Lucon
 using Test
+using Aqua
 using LinearAlgebra
 using Random
 
@@ -16,6 +17,9 @@ Hreal    = Hermitian(rand(rng,dim,dim) .- 0.5)
 
 
 @testset "Lucon.jl" begin
+    @testset "Code quality (Aqua.jl)" begin
+        Aqua.test_all(Lucon)
+    end
 
     # a hermitian matrix, diagonalized from a random unitary matrix
     @testset "unitary group" begin
