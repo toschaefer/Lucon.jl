@@ -95,7 +95,7 @@ Keyword arguments:
   Riemannian gradient. Unlike the Frobenius norm, this maximum norm is independent of the
   size of the system, so that one and the same threshold converges a subsystem and a
   supersystem built from copies of it to the same accuracy.
-* `SolverAlgo`: currently only the conjugate gradient Polak-Ribièrre algorithm, `:CGPR`.
+* `SolverAlgo`: currently only the conjugate gradient Polak-Ribière algorithm, `:CGPR`.
 * `PolynomialLineSearchDegree`: the order P of the polynomial used in the line search, 3 to 5.
 * `Callback`: a function called once per iteration with the named tuple
   `(; Iteration, MaxGradient, Loss, U)`, before the break conditions are tested. Returning
@@ -123,7 +123,7 @@ function optimize(
     Callback = nothing
 )::Result where T<:Number
 
-    # currently only the CG-PR (conjugate gradient Polak-Ribièrre algorithm is implemented)
+    # currently only the CG-PR (conjugate gradient Polak-Ribière algorithm is implemented)
     SolverAlgo === :CGPR || throw(ArgumentError("algorithm :$SolverAlgo currently not supported in Lucon"))
     UDegree >= 1 || throw(ArgumentError("UDegree must be a positive integer"))
     PolynomialLineSearchDegree >= 1 || throw(ArgumentError("PolynomialLineSearchDegree must be a positive integer"))
@@ -147,7 +147,7 @@ function optimize(
 
         Iteration += 1
 
-        # get Eucledean derivative Γ and Loss function
+        # get Euclidean derivative Γ and Loss function
         (Γ, Loss) = Gradient(U, true)
 
         # construct current Riemannian derivative Gcurr, see Eq. (2)

@@ -1,5 +1,5 @@
 """
-BrockettLoss --- diagonalizing an hermitian matrix iteratively using the Brockett criteroin
+BrockettLoss --- diagonalizing an hermitian matrix iteratively using the Brockett criterion
 
 This simple module serves as a template for the implementation of functionals to optimize with the Lucon.jl module.
 Furthermore it is used to test the Lucon.jl module.
@@ -7,7 +7,7 @@ Furthermore it is used to test the Lucon.jl module.
 The functional considered here is given by
 L(U) = real(trace(U'HUN))
 where H is the hermitian matrix to be diagonalized and N is a diagonal matrix with distinct entries in ascending order.
-The euclidean derivative simply reads
+The Euclidean derivative simply reads
 dL/dU' = HUN
 
 The code basically follows the functional as proposed in
