@@ -4,7 +4,7 @@ using Aqua
 using LinearAlgebra
 using Random
 
-include("../src/BrockettLoss.jl")
+include("../examples/BrockettLoss.jl")
 import .BrockettLoss
 
 # the Brockett criterion L(U) = tr(U'HUN) with N_nm = n δ_nm

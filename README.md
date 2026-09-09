@@ -6,7 +6,7 @@ Lucon (**L**oss optimization under **U**nitary **CON**straint) optimizes loss fu
 
 Applications range from signal processing and machine learning to orbital rotations (e.g. orbital localization) in quantum chemistry and materials science. The main motivation for Lucon.jl are orbital localizations for calculations in materials physics and quantum chemistry, see [How to cite?](#how-to-cite) below.
 
-Lucon is designed in a way that users can implement arbitrary loss functionals with little effort. As a template the [BrockettLoss.jl](src/BrockettLoss.jl) functional can be used (see example below).
+Lucon is designed in a way that users can implement arbitrary loss functionals with little effort. As a template the [BrockettLoss.jl](examples/BrockettLoss.jl) functional can be used (see example below).
 
 To provide a very simple and illustrative example of Lucon's potential use cases, consider the following loss functional that can be used to diagonalize a hermitian matrix.
 ```math
@@ -71,7 +71,7 @@ end
 Result = Lucon.optimize(LossFunction(H), U; UDegree=2, Maximize=true)
 ```
 The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(L::LossFunction)(U, CalcLoss)`, does not define a function called `LossFunction`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the loss function here are interchangeable.
-The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).
+The full example and its usage can be found in the example file [BrockettLoss.jl](examples/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).
 Both can be used as a **template** to implement arbitrary loss functionals.
 
 `optimize` returns a `Lucon.Result`:
