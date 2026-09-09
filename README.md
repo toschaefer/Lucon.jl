@@ -51,26 +51,26 @@ true
 When the functional has to carry precomputed quantities, give them to a struct and make the struct callable. Store them with a concrete type and build them once, since the functional is evaluated once per iteration and once for every sampling point of the line search, and therefore dominates the run time. Annotate the argument as `U::AbstractMatrix` rather than `Matrix`, so that `U` may also live on a GPU:
 
 ```julia
-struct BrockettCriterion{TH<:Hermitian, TN<:Diagonal}
+struct LossFunction{TH<:Hermitian, TN<:Diagonal}
     H::TH
     N::TN
 end
 
-BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal(float.(1:size(H,1))))
+LossFunction(H::Hermitian) = LossFunction(H, Diagonal(float.(1:size(H,1))))
 
-# L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
+# the loss tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
 # without ever forming the matrix product U'Γ
-function BrockettGradient(B::BrockettCriterion, U::AbstractMatrix, CalcLoss::Bool)
-    Γ = B.H*U*B.N
+function EuclideanGradient(L::LossFunction, U::AbstractMatrix, CalcLoss::Bool)
+    Γ = L.H*U*L.N
     (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
 end
 
-# from here on B(U, CalcLoss) calls BrockettGradient(B, U, CalcLoss)
-(B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool) = BrockettGradient(B, U, CalcLoss)
+# from here on L(U, CalcLoss) calls EuclideanGradient(L, U, CalcLoss)
+(L::LossFunction)(U::AbstractMatrix, CalcLoss::Bool) = EuclideanGradient(L, U, CalcLoss)
 
-Result = Lucon.optimize(BrockettCriterion(H), U; UDegree=2, Maximize=true)
+Result = Lucon.optimize(LossFunction(H), U; UDegree=2, Maximize=true)
 ```
-The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(B::BrockettCriterion)(U, CalcLoss)`, does not define a function called `BrockettCriterion`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the criterion here are interchangeable.
+The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(L::LossFunction)(U, CalcLoss)`, does not define a function called `LossFunction`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the loss function here are interchangeable.
 The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).
 Both can be used as a **template** to implement arbitrary loss functionals.
 

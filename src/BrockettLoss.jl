@@ -25,46 +25,48 @@ import Lucon
 
 
 """
-The Brockett criterion, holding the hermitian matrix H to be diagonalized and the diagonal
-matrix N. Both are stored with a concrete type, and N is built once rather than on every call.
+The loss function L(U) = tr(U'HUN), known as the Brockett criterion, holding the hermitian
+matrix H to be diagonalized and the diagonal matrix N. Both are stored with a concrete type,
+and N is built once rather than on every call.
 """
-struct BrockettCriterion{TH<:Hermitian, TN<:Diagonal}
+struct LossFunction{TH<:Hermitian, TN<:Diagonal}
     H::TH
     N::TN
 end
 
 # the N matrix is a diagonal matrix with entries N_nn = n, distinct and ascending
-BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal(float.(1:size(H,1))))
+LossFunction(H::Hermitian) = LossFunction(H, Diagonal(float.(1:size(H,1))))
 
 
 """
-Calculate and return the Euclidean derivative of the Brockett criterion `B` at `U` and, if
-`CalcLoss` is set, the loss itself. This is the function `Lucon.optimize` needs, and the
-line below hands it to Lucon by making `B` itself callable.
+Calculate and return the Euclidean derivative of the loss function `L` at `U` and, if
+`CalcLoss` is set, the loss itself. It is the Euclidean and not the Riemannian gradient that
+is asked for here, since `Lucon.optimize` forms the latter itself. This is the function Lucon
+needs, and the line below hands it over by making `L` itself callable.
 """
-function BrockettGradient(B::BrockettCriterion, U::AbstractMatrix, CalcLoss::Bool)
-    Γ = B.H*U*B.N # Euclidean derivative has same type and dimension as U
-    # L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
+function EuclideanGradient(L::LossFunction, U::AbstractMatrix, CalcLoss::Bool)
+    Γ = L.H*U*L.N # Euclidean derivative has same type and dimension as U
+    # the loss tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
     # without ever forming the matrix product U'Γ
     Loss = CalcLoss ? real(dot(U, Γ)) : 0.0
     return (Γ, Loss)
 end
 
 # A method whose name is an argument makes instances of that argument's type callable:
-# from here on B(U, CalcLoss) calls BrockettGradient(B, U, CalcLoss), so that a criterion
-# can be passed to Lucon.optimize wherever a function is expected.
-(B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool) = BrockettGradient(B, U, CalcLoss)
+# from here on L(U, CalcLoss) calls EuclideanGradient(L, U, CalcLoss), so that a loss
+# function can be passed to Lucon.optimize wherever a function is expected.
+(L::LossFunction)(U::AbstractMatrix, CalcLoss::Bool) = EuclideanGradient(L, U, CalcLoss)
 
 
 """
-Maximize the Brockett criterion, i.e. diagonalize the hermitian matrix it holds.
+Maximize the loss function, i.e. diagonalize the hermitian matrix it holds.
 
 `UDegree=2`, since L(U + tZ) is quadratic in t, and `Maximize=true` are properties of the
 functional rather than of the call site, so they are fixed here instead of being left to the
 caller. Every other keyword is passed on to `Lucon.optimize`.
 """
-function optimize(B::BrockettCriterion, U::AbstractMatrix; kwargs...)
-    return Lucon.optimize(B, U; UDegree=2, Maximize=true, kwargs...)
+function optimize(L::LossFunction, U::AbstractMatrix; kwargs...)
+    return Lucon.optimize(L, U; UDegree=2, Maximize=true, kwargs...)
 end
 
 
