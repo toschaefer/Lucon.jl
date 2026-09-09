@@ -12,7 +12,7 @@ To provide a very simple and illustrative example of Lucon's potential use cases
 ```math
 L(U) = \text{tr}(U^\dagger H U N)
 ```
-Here, $H$ is a hermitian matrix (to be diagonalized) and $N$ is a diagonal matrix with distinct entries in ascending order, $N_{nm} = n\delta_{nm}$. Lucon finds the optimal $U$ which maximizes the loss functional. For this particular choice of $L(U)$ (also known as [Brockett criterion](https://doi.org/10.1016/0024-3795(91)90021-N)), the optimal unitary matrix is the one that diagonalizes $H$.
+Here, $H$ is a hermitian matrix (to be diagonalized) and $N$ is a diagonal matrix with distinct entries in ascending order, $N_{nm} = n\delta_{nm}$. Lucon finds the optimal $U$ which maximizes the loss functional. For this particular choice of $L(U)$ (also known as [Brockett criterion](https://doi.org/10.1016/0024-3795(91)90021-N)), the optimal unitary matrix is the one that diagonalizes $H$. The ascending entries of $N$ are what makes that maximum unique: since $L(U) = \sum_n n\,(U^\dagger H U)_{nn}$, the largest weight has to meet the largest diagonal element, so $L$ is maximal when $U^\dagger H U$ is diagonal with the eigenvalues in ascending order.
 
 ## Install
 
@@ -37,28 +37,40 @@ N = Diagonal([1.0*n for n=1:size(H,1)]) # the N matrix is a diagonal matrix with
 
 Result = Lucon.optimize(U; UDegree=2, Maximize=true) do U, CalcLoss
     Γ = H*U*N # Euclidean derivative has same type and dimension as U
-    # the trace of U'Γ is the Frobenius product of U and Γ
+    # L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot
+    # evaluates without ever forming the matrix product U'Γ
     (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
 end
+```
+The `do` block is an ordinary anonymous function, passed to `optimize` as its first argument, and `Result.U` is the matrix that diagonalizes `H`:
+```julia
+julia> Result.U' * H * Result.U ≈ Diagonal(eigvals(H)) # eigenvalues in ascending order
+true
 ```
 
 When the functional has to carry precomputed quantities, give them to a struct and make the struct callable. Store them with a concrete type and build them once, since the functional is evaluated once per iteration and once for every sampling point of the line search, and therefore dominates the run time. Annotate the argument as `U::AbstractMatrix` rather than `Matrix`, so that `U` may also live on a GPU:
 
 ```julia
-struct BrockettCriterion{T<:Number, A<:AbstractMatrix{T}}
-    H::Hermitian{T,A}
-    N::Diagonal{Float64,Vector{Float64}}
+struct BrockettCriterion{TH<:Hermitian, TN<:Diagonal}
+    H::TH
+    N::TN
 end
 
-BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal([1.0*n for n=1:size(H,1)]))
+BrockettCriterion(H::Hermitian) = BrockettCriterion(H, Diagonal(float.(1:size(H,1))))
 
-function (B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool)
+# L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
+# without ever forming the matrix product U'Γ
+function BrockettGradient(B::BrockettCriterion, U::AbstractMatrix, CalcLoss::Bool)
     Γ = B.H*U*B.N
     (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
 end
 
+# from here on B(U, CalcLoss) calls BrockettGradient(B, U, CalcLoss)
+(B::BrockettCriterion)(U::AbstractMatrix, CalcLoss::Bool) = BrockettGradient(B, U, CalcLoss)
+
 Result = Lucon.optimize(BrockettCriterion(H), U; UDegree=2, Maximize=true)
 ```
+The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(B::BrockettCriterion)(U, CalcLoss)`, does not define a function called `BrockettCriterion`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the criterion here are interchangeable.
 The full example and its usage can be found in the source file [BrockettLoss.jl](src/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).
 Both can be used as a **template** to implement arbitrary loss functionals.
 
@@ -92,7 +104,7 @@ Result = Lucon.optimize(
     Callback=nothing
 )
 ```
-* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans, where $\omega_\text{max}$ is the largest absolute eigenvalue of the ascent direction. It has no default because it is a property of the functional. For the Brockett criterion above $q=2$.
+* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans, where $\omega_\text{max}$ is the largest absolute eigenvalue of the ascent direction. It has no default because it is a property of the functional. For the Brockett criterion above $L(U+tZ)$ carries one factor $U^\dagger$ and one factor $U$, is therefore quadratic in $t$, and $q=2$.
 * `Maximize` maximizes $L(U)$ instead of minimizing it.
 * `MinIter` suppresses the convergence signal before this number of iterations is reached.
 * `MaxIter` limits the number of rotations of `U` and is unlimited by default.
