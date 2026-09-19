@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="docs/src/assets/logo.png" height="80" alt="Lucon logo">
+  <img src="docs/src/assets/logo.png" height="100" alt="Lucon logo">
 </p>
 
 # Lucon
