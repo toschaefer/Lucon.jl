@@ -1,7 +1,3 @@
-<p align="left">
-  <img src="docs/src/assets/logo.png" height="80" alt="Lucon logo">
-</p>
-
 # Lucon
 
 [![Build Status](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/toschaefer/Lucon.jl/actions/workflows/CI.yml?query=branch%3Amain)
@@ -9,6 +5,10 @@
 Lucon (**L**oss optimization under **U**nitary **CON**straint) optimizes loss functions mapping a unitary matrix onto a number. A conjugate-gradient algorithm is used following the work by [T. Abrudan et al., Signal Processing 89 (2009) 1704–1714](https://dx.doi.org/10.1016/j.sigpro.2009.03.015).
 
 Applications range from signal processing and machine learning to orbital rotations (e.g. orbital localization) in quantum chemistry and materials science. The main motivation for Lucon.jl are orbital localizations for calculations in materials physics and quantum chemistry, see [How to cite?](#how-to-cite) below.
+
+<p align="center">
+  <img src="docs/src/assets/logo.png" height="150" alt="Lucon logo">
+</p>
 
 Lucon is designed in a way that users can implement arbitrary loss functionals with little effort. As a template the [BrockettLoss.jl](examples/BrockettLoss.jl) functional can be used (see example below).
 
