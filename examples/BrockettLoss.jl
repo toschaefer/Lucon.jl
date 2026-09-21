@@ -40,33 +40,33 @@ LossFunction(H::Hermitian) = LossFunction(H, Diagonal(float.(1:size(H,1))))
 
 """
 Calculate and return the Euclidean derivative of the loss function `L` at `U` and, if
-`CalcLoss` is set, the loss itself. It is the Euclidean and not the Riemannian gradient that
+`calc_loss` is set, the loss itself. It is the Euclidean and not the Riemannian gradient that
 is asked for here, since `Lucon.optimize` forms the latter itself. This is the function Lucon
 needs, and the line below hands it over by making `L` itself callable.
 """
-function EuclideanGradient(L::LossFunction, U::AbstractMatrix, CalcLoss::Bool)
+function euclidean_gradient(L::LossFunction, U::AbstractMatrix, calc_loss::Bool)
     Γ = L.H*U*L.N # Euclidean derivative has same type and dimension as U
     # the loss tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
     # without ever forming the matrix product U'Γ
-    Loss = CalcLoss ? real(dot(U, Γ)) : 0.0
-    return (Γ, Loss)
+    loss = calc_loss ? real(dot(U, Γ)) : 0.0
+    return (Γ, loss)
 end
 
 # A method whose name is an argument makes instances of that argument's type callable:
-# from here on L(U, CalcLoss) calls EuclideanGradient(L, U, CalcLoss), so that a loss
+# from here on L(U, calc_loss) calls euclidean_gradient(L, U, calc_loss), so that a loss
 # function can be passed to Lucon.optimize wherever a function is expected.
-(L::LossFunction)(U::AbstractMatrix, CalcLoss::Bool) = EuclideanGradient(L, U, CalcLoss)
+(L::LossFunction)(U::AbstractMatrix, calc_loss::Bool) = euclidean_gradient(L, U, calc_loss)
 
 
 """
 Maximize the loss function, i.e. diagonalize the hermitian matrix it holds.
 
-`UDegree=2`, since L(U + tZ) is quadratic in t, and `Maximize=true` are properties of the
-functional rather than of the call site, so they are fixed here instead of being left to the
-caller. Every other keyword is passed on to `Lucon.optimize`.
+`max_taylor_degree=2`, since L(U + tZ) is quadratic in t, and `maximize=true` are properties
+of the functional rather than of the call site, so they are fixed here instead of being left
+to the caller. Every other keyword is passed on to `Lucon.optimize`.
 """
 function optimize(L::LossFunction, U::AbstractMatrix; kwargs...)
-    return Lucon.optimize(L, U; UDegree=2, Maximize=true, kwargs...)
+    return Lucon.optimize(L, U; max_taylor_degree=2, maximize=true, kwargs...)
 end
 
 

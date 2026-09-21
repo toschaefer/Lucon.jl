@@ -29,7 +29,7 @@ Pkg.add("Lucon")
 
 ## Usage
 
-In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `Gradient(U, CalcLoss)` returning the tuple `(Γ, Loss)`. The value of the loss is only read when `CalcLoss` is `true`, so its computation may be skipped otherwise. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
+In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `gradient(U, calc_loss)` returning the tuple `(Γ, loss)`. The value of the loss is only read when `calc_loss` is `true`, so its computation may be skipped otherwise. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
 
 ```julia
 import Lucon
@@ -37,18 +37,18 @@ using LinearAlgebra
 
 H = Hermitian(rand(6,6) + im*rand(6,6)) # the hermitian matrix to be diagonalized
 U = Matrix{ComplexF64}(I, 6, 6)         # the initial unitary matrix
-N = Diagonal([1.0*n for n=1:size(H,1)]) # the N matrix is a diagonal matrix with entries N_nn = n
+N = Diagonal(float.(1:size(H,1)))       # the N matrix is a diagonal matrix with entries N_nn = n
 
-Result = Lucon.optimize(U; UDegree=2, Maximize=true) do U, CalcLoss
+result = Lucon.optimize(U; max_taylor_degree=2, maximize=true) do U, calc_loss
     Γ = H*U*N # Euclidean derivative has same type and dimension as U
     # L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot
     # evaluates without ever forming the matrix product U'Γ
-    (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
+    (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
 end
 ```
-The `do` block is an ordinary anonymous function, passed to `optimize` as its first argument, and `Result.U` is the matrix that diagonalizes `H`:
+The `do` block is an ordinary anonymous function, passed to `optimize` as its first argument, and `result.U` is the matrix that diagonalizes `H`:
 ```julia
-julia> Result.U' * H * Result.U ≈ Diagonal(eigvals(H)) # eigenvalues in ascending order
+julia> result.U' * H * result.U ≈ Diagonal(eigvals(H)) # eigenvalues in ascending order
 true
 ```
 
@@ -64,70 +64,70 @@ LossFunction(H::Hermitian) = LossFunction(H, Diagonal(float.(1:size(H,1))))
 
 # the loss tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
 # without ever forming the matrix product U'Γ
-function EuclideanGradient(L::LossFunction, U::AbstractMatrix, CalcLoss::Bool)
+function euclidean_gradient(L::LossFunction, U::AbstractMatrix, calc_loss::Bool)
     Γ = L.H*U*L.N
-    (Γ, CalcLoss ? real(dot(U, Γ)) : 0.0)
+    (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
 end
 
-# from here on L(U, CalcLoss) calls EuclideanGradient(L, U, CalcLoss)
-(L::LossFunction)(U::AbstractMatrix, CalcLoss::Bool) = EuclideanGradient(L, U, CalcLoss)
+# from here on L(U, calc_loss) calls euclidean_gradient(L, U, calc_loss)
+(L::LossFunction)(U::AbstractMatrix, calc_loss::Bool) = euclidean_gradient(L, U, calc_loss)
 
-Result = Lucon.optimize(LossFunction(H), U; UDegree=2, Maximize=true)
+result = Lucon.optimize(LossFunction(H), U; max_taylor_degree=2, maximize=true)
 ```
-The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(L::LossFunction)(U, CalcLoss)`, does not define a function called `LossFunction`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the loss function here are interchangeable.
+The last line is the one piece of syntax worth reading twice. A method whose *name* is an argument, `(L::LossFunction)(U, calc_loss)`, does not define a function called `LossFunction`; it defines what happens when an *instance* of that type is called like a function. Such a struct is a closure you can name: the fields are the captured data, this method is the body. That is why `optimize` needs neither a sub-typed argument nor an overloaded method, and why the `do` block above and the loss function here are interchangeable.
 The full example and its usage can be found in the example file [BrockettLoss.jl](examples/BrockettLoss.jl) and in the test file [runtests.jl](test/runtests.jl).
 Both can be used as a **template** to implement arbitrary loss functionals.
 
 `optimize` returns a `Lucon.Result`:
 ```julia
-julia> Result
+julia> result
 Lucon.Result
-  Status:      converged
-  Iterations:  79
-  Loss:        9.5330162221636101e+00
-  max|grad|:   4.030e-09
-  U:           6×6 Matrix{ComplexF64}
+  status:        converged
+  iterations:    79
+  loss:          9.5330162221636101e+00
+  max_gradient:  4.030e-09
+  U:             6×6 Matrix{ComplexF64}
 
-julia> Lucon.Converged(Result)
+julia> Lucon.converged(result)
 true
 ```
-Its fields are `Result.U`, `Result.Loss`, `Result.MaxGradient`, `Result.Iterations` and `Result.Status`. `Status` is one of `:converged`, `:maxiter`, `:callback`, or `:linesearch` if the line search found no positive step size.
+Its fields are `result.U`, `result.loss`, `result.max_gradient`, `result.iterations` and `result.status`. `loss` and `max_gradient` are always `Float64`, whatever the element type of `U`. `status` is one of `:converged`, `:max_iter`, `:callback`, or `:line_search` if the line search found no positive step size.
 
 The full signature reads
 ```julia
-Result = Lucon.optimize(
-    Gradient,
+result = Lucon.optimize(
+    gradient,
     U;
-    UDegree,
-    Maximize=false,
-    MinIter=0,
-    MaxIter=typemax(Int),
-    MaxGradientTolerance=1.0e-8,
-    SolverAlgo=:CGPR,
-    PolynomialLineSearchDegree=5,
-    Callback=nothing
+    max_taylor_degree,
+    maximize=false,
+    min_iter=0,
+    max_iter=typemax(Int),
+    max_gradient_tolerance=1e-8,
+    solver_algo=:CGPR,
+    polynomial_line_search_degree=5,
+    callback=nothing
 )
 ```
-* `UDegree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans, where $\omega_\text{max}$ is the largest absolute eigenvalue of the ascent direction. It has no default because it is a property of the functional. For the Brockett criterion above $L(U+tZ)$ carries one factor $U^\dagger$ and one factor $U$, is therefore quadratic in $t$, and $q=2$.
-* `Maximize` maximizes $L(U)$ instead of minimizing it.
-* `MinIter` suppresses the convergence signal before this number of iterations is reached.
-* `MaxIter` limits the number of rotations of `U` and is unlimited by default.
-* `MaxGradientTolerance` is the threshold below which the largest absolute element of the Riemannian gradient $G$ has to drop for convergence. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $M$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{M}$. One and the same `MaxGradientTolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom.
-* `SolverAlgo` selects the solver, currently only the conjugate-gradient Polak-Ribière algorithm `:CGPR`.
-* `PolynomialLineSearchDegree` is the number $P$ of equidistant points $\mu = \mu_\text{step}, 2\mu_\text{step}, \dots$ with $\mu_\text{step} = T_\mu/P$ at which the line search samples the derivative of $L$ along the geodesic, and equally the order of the polynomial fitted through them. Reasonable values are 3 to 5.
-* `Callback` reports the progress of the iteration, see [Output](#output) below.
+* `max_taylor_degree` is the order $q$ of the loss functional, i.e. the highest power of $t$ appearing in the Taylor expansion of $L(U + tZ)$. It sets the width $T_\mu = 2\pi/(q\,|\omega_\text{max}|)$ of the window the line search scans, where $\omega_\text{max}$ is the largest absolute eigenvalue of the ascent direction. It has no default because it is a property of the functional. For the Brockett criterion above $L(U+tZ)$ carries one factor $U^\dagger$ and one factor $U$, is therefore quadratic in $t$, and $q=2$.
+* `maximize` maximizes $L(U)$ instead of minimizing it.
+* `min_iter` suppresses the convergence signal before this number of iterations is reached.
+* `max_iter` limits the number of rotations of `U` and is unlimited by default.
+* `max_gradient_tolerance` is the threshold below which the largest absolute element of the Riemannian gradient $G$ has to drop for convergence. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $M$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{M}$. One and the same `max_gradient_tolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom.
+* `solver_algo` selects the solver, currently only the conjugate-gradient Polak-Ribière algorithm `:CGPR`.
+* `polynomial_line_search_degree` is the number $P$ of equidistant points $\mu = \mu_\text{step}, 2\mu_\text{step}, \dots$ with $\mu_\text{step} = T_\mu/P$ at which the line search samples the derivative of $L$ along the geodesic, and equally the order of the polynomial fitted through them. Reasonable values are 3 to 5.
+* `callback` reports the progress of the iteration, see [Output](#output) below.
 
 The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type.
 
 ## Output
 
-`optimize` prints nothing on its own, except a warning when the line search fails. Progress is reported through `Callback`, a function which is called once per iteration with the named tuple `(; Iteration, MaxGradient, Loss, U)` and which stops the iteration when it returns `true`. It is called before the break conditions are tested and therefore also sees the iterate the iteration stops on, so that `MaxIter=3` yields four calls. To print a convergence trace, pass the ready-made `Lucon.PrintTrace`:
+`optimize` prints nothing on its own. Progress is reported through `callback`, a function which is called once per iteration with the named tuple `(; iteration, max_gradient, loss, U)` and which stops the iteration when it returns `true`. It is called before the break conditions are tested and therefore also sees the iterate the iteration stops on, so that `max_iter=3` yields four calls. To print a convergence trace, pass the ready-made `Lucon.PrintTrace`:
 ```julia
-Result = Lucon.optimize(
-    Gradient,
+result = Lucon.optimize(
+    gradient,
     U;
-    UDegree=2,
-    Callback=Lucon.PrintTrace() # or Lucon.PrintTrace(stderr)
+    max_taylor_degree=2,
+    callback=Lucon.PrintTrace() # or Lucon.PrintTrace(stderr)
 )
 ```
 ```
@@ -141,17 +141,17 @@ The last column is the wall clock time one iteration took. The first line carrie
 
 The callback is equally the place to record a convergence history, to checkpoint `U`, or to stop on a criterion of your own:
 ```julia
-History = Float64[]
-RecordLoss(State) = (push!(History, State.Loss); State.Iteration ≥ 100)
+history = Float64[]
+record_loss(state) = (push!(history, state.loss); state.iteration ≥ 100)
 
-Result = Lucon.optimize(
-    Gradient,
+result = Lucon.optimize(
+    gradient,
     U;
-    UDegree=2,
-    Callback=RecordLoss
+    max_taylor_degree=2,
+    callback=record_loss
 )
 ```
-A callback which stopped the iteration leaves `Result.Status == :callback`. The reason for which the iteration stopped is in addition emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
+A callback which stopped the iteration leaves `result.status == :callback`. The reason for which the iteration stopped is in addition emitted as a `@debug` message and can be made visible with `ENV["JULIA_DEBUG"] = "Lucon"`.
 
 ## How to cite?
 
