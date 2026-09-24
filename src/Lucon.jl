@@ -97,7 +97,9 @@ Keyword arguments:
   size of the system, so that one and the same threshold converges a subsystem and a
   supersystem built from copies of it to the same accuracy.
 * `solver_algo`: currently only the conjugate gradient Polak-Ribière algorithm, `:CGPR`.
-* `polynomial_line_search_degree`: the order P of the polynomial used in the line search, 3 to 5.
+* `line_search_samples`: the number P of points at which the line search samples the derivative
+  of L inside the window, each costing one gradient evaluation. A polynomial of degree P is
+  fitted through them, so P must be at least 3 to resolve one oscillation; 3 to 5 is reasonable.
 * `callback`: a function called once per iteration with the named tuple
   `(; iteration, max_gradient, loss, U)`, before the break conditions are tested. Returning
   `true` from it stops the iteration. `optimize` prints nothing on its own; pass
@@ -120,14 +122,14 @@ function optimize(
     max_iter::Integer = typemax(Int),
     max_gradient_tolerance::Real = 1e-8,
     solver_algo::Symbol = :CGPR,
-    polynomial_line_search_degree::Integer = 5,
+    line_search_samples::Integer = 5,
     callback = nothing
 )::Result where T<:Number
 
     # currently only the CG-PR (conjugate gradient Polak-Ribière algorithm is implemented)
     solver_algo === :CGPR || throw(ArgumentError("algorithm :$solver_algo currently not supported in Lucon"))
     max_taylor_degree >= 1 || throw(ArgumentError("max_taylor_degree must be a positive integer"))
-    polynomial_line_search_degree >= 1 || throw(ArgumentError("polynomial_line_search_degree must be a positive integer"))
+    line_search_samples >= 3 || throw(ArgumentError("line_search_samples must be at least 3"))
     min_iter >= 0 || throw(ArgumentError("min_iter must be non-negative"))
     max_iter >= 0 || throw(ArgumentError("max_iter must be non-negative"))
 
@@ -193,7 +195,7 @@ function optimize(
         end
 
         # find the optimal step size via polynomial line search
-        (U, μ) = polynomial_line_search(gradient, G, U, H, max_taylor_degree, sgn, polynomial_line_search_degree)
+        (U, μ) = polynomial_line_search(gradient, G, U, H, max_taylor_degree, sgn, line_search_samples)
 
         # a vanishing step size leaves U unchanged and no further progress can be made
         if iszero(μ)

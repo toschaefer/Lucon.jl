@@ -104,7 +104,7 @@ result = Lucon.optimize(
     max_iter=typemax(Int),
     max_gradient_tolerance=1e-8,
     solver_algo=:CGPR,
-    polynomial_line_search_degree=5,
+    line_search_samples=5,
     callback=nothing
 )
 ```
@@ -114,7 +114,7 @@ result = Lucon.optimize(
 * `max_iter` limits the number of rotations of `U` and is unlimited by default.
 * `max_gradient_tolerance` is the threshold below which the largest absolute element of the Riemannian gradient $G$ has to drop for convergence. This maximum norm is used instead of the Frobenius norm because it does not grow with the size of the system: if a supersystem is built from $M$ non-interacting copies of a subsystem, then $\max_{ij}|G_{ij}|$ is unchanged while $\|G\|_F$ grows as $\sqrt{M}$. One and the same `max_gradient_tolerance` therefore converges subsystem and supersystem to the same accuracy per degree of freedom.
 * `solver_algo` selects the solver, currently only the conjugate-gradient Polak-Ribière algorithm `:CGPR`.
-* `polynomial_line_search_degree` is the number $P$ of equidistant points $\mu = \mu_\text{step}, 2\mu_\text{step}, \dots$ with $\mu_\text{step} = T_\mu/P$ at which the line search samples the derivative of $L$ along the geodesic, and equally the order of the polynomial fitted through them. Reasonable values are 3 to 5.
+* `line_search_samples` is the number $P$ of equidistant points $\mu = \mu_\text{step}, 2\mu_\text{step}, \dots$ with $\mu_\text{step} = T_\mu/P$ at which the line search samples the derivative of $L$ along the geodesic, each costing one gradient evaluation. A polynomial of degree $P$ is fitted through them, so $P$ must be at least 3 to resolve one oscillation of the derivative; the window is chosen such that 3 to 5 suffice for any $q$.
 * `callback` reports the progress of the iteration, see [Output](#output) below.
 
 The element type of the initial `U` selects the group that is optimized over, the orthogonal group for a real and the unitary group for a complex element type.
