@@ -16,7 +16,8 @@ The outcome of `optimize`.
 
 * `U`: the optimal unitary matrix.
 * `loss`: the value of the loss functional at `U`.
-* `max_gradient`: the largest absolute element of the Riemannian gradient at `U`.
+* `max_gradient`: max_ij |G_ij|, the largest component of the Riemannian gradient G at `U` over
+  all rotation planes, G_ij being the derivative with respect to the rotation in the (i,j) plane.
 * `iterations`: the number of rotations of `U` that were performed, the quantity bounded by `max_iter`.
 * `status`: why the iteration stopped. One of `:converged`, `:max_iter`, `:callback`, or
   `:line_search` if the line search found no positive step size.
@@ -147,10 +148,12 @@ function optimize(
 
     # the main iteration loop (break condition via the gradient, max_iter or the step size)
     iteration = 0
-    status = :max_iter
+    rotations = 0 # one less than iteration, since every break condition is tested before U is rotated
+    local status::Symbol
     while true
 
         iteration += 1
+        rotations = iteration - 1
 
         # get Euclidean derivative Γ and loss function
         (Γ, loss) = gradient(U, true)
@@ -169,13 +172,15 @@ function optimize(
         end
 
         # check if convergence is reached
-        if max_gradient < max_gradient_tolerance && iteration > min_iter
+        if max_gradient < max_gradient_tolerance && rotations >= min_iter
             status = :converged
             break
         end
 
-        # max_iter counts the rotations of U, of which none has been performed yet
-        iteration > max_iter && break
+        if rotations >= max_iter
+            status = :max_iter
+            break
+        end
 
         # Calculate conjugate gradient Polak-Ribière-Polyak (CG-PR) update factor, see Eq. (10)
         if iteration > 1
@@ -208,8 +213,7 @@ function optimize(
 
     @debug "Lucon.optimize stopped with status :$status"
 
-    # every break condition is tested before U is rotated, so one rotation less than iterations
-    return Result(U, loss, max_gradient, iteration - 1, status)
+    return Result(U, loss, max_gradient, rotations, status)
 end # optimize
 
 
