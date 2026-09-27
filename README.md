@@ -29,7 +29,7 @@ Pkg.add("Lucon")
 
 ## Usage
 
-In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `gradient(U, calc_loss)` returning the tuple `(Γ, loss)`. The value of the loss is only read when `calc_loss` is `true`, so its computation may be skipped otherwise. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
+In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `gradient(U, calc_loss)` returning the tuple `(Γ, loss)`. The value of the loss is only read when `calc_loss` is `true`, so return `NaN` — or anything — otherwise and skip its computation. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
 
 ```julia
 import Lucon
@@ -43,7 +43,7 @@ result = Lucon.optimize(U; max_taylor_degree=2, maximize=true) do U, calc_loss
     Γ = H*U*N # Euclidean derivative has same type and dimension as U
     # L = tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot
     # evaluates without ever forming the matrix product U'Γ
-    (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
+    (Γ, calc_loss ? real(dot(U, Γ)) : NaN)
 end
 ```
 The `do` block is an ordinary anonymous function, passed to `optimize` as its first argument, and `result.U` is the matrix that diagonalizes `H`:
@@ -66,7 +66,7 @@ LossFunction(H::Hermitian) = LossFunction(H, Diagonal(float.(1:size(H,1))))
 # without ever forming the matrix product U'Γ
 function euclidean_gradient(L::LossFunction, U::AbstractMatrix, calc_loss::Bool)
     Γ = L.H*U*L.N
-    (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
+    (Γ, calc_loss ? real(dot(U, Γ)) : NaN)
 end
 
 # from here on L(U, calc_loss) calls euclidean_gradient(L, U, calc_loss)

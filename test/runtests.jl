@@ -55,7 +55,7 @@ H_real    = Hermitian(rand(rng,dim,dim) .- 0.5)
         N = Diagonal(1.0:dim)
         res = Lucon.optimize(Matrix{ComplexF64}(I,dim,dim); max_taylor_degree=2, maximize=true) do U, calc_loss
             Γ = H_complex*U*N
-            (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
+            (Γ, calc_loss ? real(dot(U, Γ)) : NaN)
         end
         @test Lucon.converged(res)
         Σ_diff = Diagonal(eigen(H_complex).values) - res.U'*H_complex*res.U

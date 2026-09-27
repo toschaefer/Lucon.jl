@@ -80,7 +80,7 @@ Calculate the optimal unitary matrix U iteratively.
 Arguments:
 * `gradient`: a callable `gradient(U, calc_loss::Bool)` which returns the tuple `(Γ, loss)`.
   Here Γ_ij = ∂L/∂conj(U_ij) is the Euclidean derivative of the loss functional L at U. The
-  value of L is only read when `calc_loss` is true, so computing it may be skipped otherwise.
+  value of L is only read when `calc_loss` is true, so return `NaN` and skip computing it otherwise.
   Any callable will do, in particular a closure or a struct carrying precomputed quantities.
 * `U`: the initial unitary matrix. Its element type selects the group the optimization runs
   on, the orthogonal group for a real and the unitary group for a complex element type.
@@ -110,7 +110,7 @@ called with `do` syntax:
 
     result = Lucon.optimize(U; max_taylor_degree=2, maximize=true) do U, calc_loss
         Γ = H*U*N
-        (Γ, calc_loss ? real(dot(U, Γ)) : 0.0)
+        (Γ, calc_loss ? real(dot(U, Γ)) : NaN)
     end
 """
 function optimize(

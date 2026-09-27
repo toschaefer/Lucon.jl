@@ -48,7 +48,7 @@ function euclidean_gradient(L::LossFunction, U::AbstractMatrix, calc_loss::Bool)
     Γ = L.H*U*L.N # Euclidean derivative has same type and dimension as U
     # the loss tr(U'HUN) = tr(U'Γ) is the Frobenius product of U and Γ, which dot evaluates
     # without ever forming the matrix product U'Γ
-    loss = calc_loss ? real(dot(U, Γ)) : 0.0
+    loss = calc_loss ? real(dot(U, Γ)) : NaN
     return (Γ, loss)
 end
 
