@@ -80,7 +80,8 @@ Calculate the optimal unitary matrix U iteratively.
 Arguments:
 * `gradient`: a callable `gradient(U, calc_loss::Bool)` which returns the tuple `(Γ, loss)`.
   Here Γ_ij = ∂L/∂conj(U_ij) is the Euclidean derivative of the loss functional L at U. The
-  value of L is only read when `calc_loss` is true, so return `NaN` and skip computing it otherwise.
+  value of L is only read when `calc_loss` is true; otherwise skip computing it and return
+  `NaN`, a `Float64` like the loss itself, so that the return type does not depend on `calc_loss`.
   Any callable will do, in particular a closure or a struct carrying precomputed quantities.
 * `U`: the initial unitary matrix. Its element type selects the group the optimization runs
   on, the orthogonal group for a real and the unitary group for a complex element type.

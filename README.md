@@ -29,7 +29,7 @@ Pkg.add("Lucon")
 
 ## Usage
 
-In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `gradient(U, calc_loss)` returning the tuple `(Γ, loss)`. The value of the loss is only read when `calc_loss` is `true`, so return `NaN` — or anything — otherwise and skip its computation. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
+In order to optimize a loss functional $L(U)$, Lucon needs the Euclidean derivative $\Gamma_{ij} = \partial L / \partial u^*_{ij}$, which for the above example (Brockett criterion) simply reads $\Gamma = \partial L /\partial U^\dagger = H U N$. You pass it as any callable `gradient(U, calc_loss)` returning the tuple `(Γ, loss)`. The value of the loss is only read when `calc_loss` is `true`; otherwise skip its computation and return `NaN`, which is a `Float64` like the loss itself, so that the return type of your function does not depend on `calc_loss`. Nothing has to be sub-typed and no method of Lucon has to be overloaded, which means that `optimize` can be called with `do` syntax:
 
 ```julia
 import Lucon
